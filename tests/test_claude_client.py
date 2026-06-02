@@ -4,12 +4,11 @@ All tests mock intelligence.claude_client._client so no real API calls are made.
 The mock_claude fixture is defined in conftest.py.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from intelligence.claude_client import analyze, chat
-
 
 # ── analyze ────────────────────────────────────────────────────────────────────
 

@@ -66,10 +66,10 @@ async def upsert_batch(docs: list[tuple[str, str, dict]]) -> None:
 async def search(query: str, limit: int = 5) -> list[dict]:
     """Return top-k most relevant documents for a query string."""
     vector = await asyncio.to_thread(_embed, query)
-    results = await _client.search(
+    response = await _client.query_points(
         collection_name=_settings.qdrant_collection,
-        query_vector=vector,
+        query=vector,
         limit=limit,
         with_payload=True,
     )
-    return [{"score": r.score, **r.payload} for r in results]
+    return [{"score": r.score, **r.payload} for r in response.points]

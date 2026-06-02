@@ -9,7 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
 import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from sqlalchemy import text  # noqa: E402
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from config.settings import get_settings  # noqa: E402
 
@@ -17,7 +21,6 @@ from config.settings import get_settings  # noqa: E402
 get_settings.cache_clear()
 
 from memory.database import Base  # noqa: E402
-
 
 # ── Shared settings ────────────────────────────────────────────────────────────
 
