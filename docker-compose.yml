@@ -1,3 +1,5 @@
+name: murff-alpha-ops
+
 services:
   postgres:
     image: timescale/timescaledb:latest-pg16
