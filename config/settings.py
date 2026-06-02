@@ -65,6 +65,14 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimension: int = 384
 
+    # ── Local LLM (Ollama) ────────────────────────────────────────────────────
+    use_local_llm: bool = False           # set True to use Ollama instead of Claude
+    local_model: str = "qwen3:latest"     # any model pulled via `ollama pull`
+    ollama_url: str = "http://localhost:11434"
+
+    # ── Discord ────────────────────────────────────────────────────────────────
+    discord_webhook_url: str = ""  # optional — set to enable digest notifications
+
     # ── FastAPI ────────────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000

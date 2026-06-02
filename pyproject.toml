@@ -45,6 +45,8 @@ test        = "pytest tests/ -v"
 lint        = "ruff check ."
 fmt         = "ruff format ."
 check       = { sequence = ["lint", "test"] }
+digest      = "python -m scripts.news_digest"
+"digest:dry" = "python -m scripts.news_digest --dry-run"
 
 [tool.ruff]
 line-length = 100
