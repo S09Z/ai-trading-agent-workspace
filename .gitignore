@@ -1,0 +1,52 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── uv ────────────────────────────────────────────────────────────────────────
+# uv.lock is intentionally committed (pinned deps for reproducible deploys)
+
+# ── Node / Next.js (dashboard/) ───────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.npm
+
+# ── AI model cache ────────────────────────────────────────────────────────────
+# sentence-transformers downloads models here if SENTENCE_TRANSFORMERS_HOME is set
+models/
+*.pt
+*.pth
+*.onnx
+*.bin
+
+# ── Logs & local data ─────────────────────────────────────────────────────────
+*.log
+logs/
+data/
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
+._*
+
+# ── Celery ────────────────────────────────────────────────────────────────────
+celerybeat-schedule
+celerybeat.pid
