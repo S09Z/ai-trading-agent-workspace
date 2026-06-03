@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start digest digest-dry test test-cov lint fmt check clean reset
+.PHONY: help install up down restart logs ps start cockpit cycle sentiment digest digest-dry test test-cov lint fmt check clean reset
 
 UV      := uv run
 COMPOSE := docker compose
@@ -36,8 +36,18 @@ reset: ## ⚠ Destroy volumes and restart fresh (wipes all data)
 	$(COMPOSE) up -d
 
 # ── App ───────────────────────────────────────────────────────────────────────
-start: ## Run startup health check (DB + Qdrant + Claude)
+start: ## Run startup health check (DB + Qdrant + LLM)
 	$(UV) python main.py
+
+cockpit: ## Start Agent Cockpit API server (port 8000)
+	$(UV) uvicorn cockpit.app:app --reload --port 8000
+
+# ── Agents ────────────────────────────────────────────────────────────────────
+cycle: ## Run full agent cycle (NewsHunter → MarketWatch → Sentiment → Risk → Research)
+	$(UV) python -m scripts.run_cycle
+
+sentiment: ## Run SentimentAnalyst on unanalysed articles
+	$(UV) python -c "import asyncio; from agents.sentiment_analyst import SentimentAnalystAgent; asyncio.run(SentimentAnalystAgent().run())"
 
 # ── Digest ────────────────────────────────────────────────────────────────────
 digest: ## Summarise recent news and post to Discord
