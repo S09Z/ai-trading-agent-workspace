@@ -63,3 +63,66 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+---
+
+## Project: AlphaOps — Build Roadmap
+
+### Phases
+
+| Phase | Status | Scope |
+| --- | --- | --- |
+| 1 | ✅ Done | Docker, config, DB models, vector store, Claude client, test suite |
+| 2 | ✅ Done | NewsHunter, MarketWatch, BaseAgent, Celery scheduler, summarizer, Discord notifier |
+| 3 | ✅ Done | SentimentAnalyst, ResearchAnalyst, RiskMonitor, RAG pipeline, Discord digest upgrade |
+| 4A | ✅ Done | Cockpit backend — FastAPI REST + WebSocket (`make cockpit`, port 8000) |
+| 4B | 🔲 Next | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art |
+| 5 | 🔲 Planned | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |
+
+### Dev Commands
+
+```bash
+make start        # health check (DB + Qdrant + LLM)
+make cockpit      # start FastAPI backend (port 8000, --reload)
+make cycle        # full agent cycle: NewsHunter → MarketWatch → Sentiment → Risk → Research
+make sentiment    # SentimentAnalyst only (after NewsHunter has run)
+make digest       # generate + post Discord digest
+make digest-dry   # preview digest without posting
+make test         # run test suite
+make check        # lint + test
+```
+
+### LLM Config (`.env`)
+
+```
+USE_LOCAL_LLM=true   # use Ollama (qwen3:latest) — no Claude credits needed
+USE_LOCAL_LLM=false  # use Claude API (default)
+```
+
+### Phase 4A — Cockpit Backend ✅
+
+- [x] `cockpit/app.py` — FastAPI app + CORS
+- [x] `cockpit/schemas.py` — AgentStatus, LogEntry, SignalOut
+- [x] `GET /agents` — list all agents with latest status
+- [x] `GET /agents/{name}/logs` — per-agent log history
+- [x] `GET /signals` — recent signals by confidence
+- [x] `GET /logs` — activity log across all agents
+- [x] `WS /logs/ws` — real-time stream (polls DB every 2s, pushes new rows)
+- [x] 12 endpoint tests, 137 total passing
+
+### Phase 4B — Cockpit Frontend 🔲
+
+- [ ] `frontend/` — Next.js app (`npx create-next-app`)
+- [ ] Market Dashboard page — signal cards, agent status badges, news feed
+- [ ] Virtual Office page — HTML Canvas pixel-art room
+- [ ] Agent sprites — one per agent, states: idle / active / sleeping / error
+- [ ] WebSocket consumer — connect `ws://localhost:8000/logs/ws`, animate sprites on new log events
+- [ ] Activity Log panel — scrolling feed beside the office canvas
+
+### Phase 5 — Deployment 🔲
+
+- [ ] Celery Beat — schedule `cycle` every 5min, `digest` every 6h
+- [ ] Production `docker-compose.prod.yml` — add cockpit + frontend services
+- [ ] Nginx config — reverse proxy for API (`:8000`) and frontend (`:3000`)
+- [ ] VPS setup — env vars, SSL, systemd or Docker restart policy
+- [ ] Health endpoint monitoring

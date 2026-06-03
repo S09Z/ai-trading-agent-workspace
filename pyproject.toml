@@ -45,6 +45,9 @@ test        = "pytest tests/ -v"
 lint        = "ruff check ."
 fmt         = "ruff format ."
 check       = { sequence = ["lint", "test"] }
+cockpit     = "uvicorn cockpit.app:app --reload --port 8000"
+cycle       = "python -m scripts.run_cycle"
+sentiment   = "python -c \"import asyncio; from agents.sentiment_analyst import SentimentAnalystAgent; asyncio.run(SentimentAnalystAgent().run())\""
 digest      = "python -m scripts.news_digest"
 "digest:dry" = "python -m scripts.news_digest --dry-run"
 
