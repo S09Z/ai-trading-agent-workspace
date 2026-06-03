@@ -28,10 +28,55 @@ async def send_message(content: str) -> None:
         r.raise_for_status()
 
 
-async def send_digest_embed(digest_text: str, article_count: int = 0, hours: int = 6) -> None:
+_SIGNAL_ICONS = {"bullish": "🟢", "bearish": "🔴", "watchlist": "🔬", "alert": "⚠️"}
+
+
+def _format_intelligence_section(
+    signals: list[dict] | None,
+    risk: dict | None,
+) -> str:
+    """Build the Agent Intelligence section. Returns empty string if nothing to show."""
+    lines: list[str] = []
+
+    sentiment = [s for s in (signals or []) if s["signal_type"] in ("bullish", "bearish")]
+    if sentiment:
+        parts = [
+            f"{s['ticker']} {_SIGNAL_ICONS[s['signal_type']]} {s['confidence']:.2f}"
+            for s in sentiment[:5]
+        ]
+        lines.append("**🧠 Agent Intelligence**")
+        lines.append("Signals: " + "  ".join(parts))
+
+    research = next(
+        (s for s in (signals or []) if s["signal_type"] == "watchlist" and s.get("rationale")),
+        None,
+    )
+    if research:
+        if not lines:
+            lines.append("**🧠 Agent Intelligence**")
+        lines.append(f"🔬 {research['ticker']}: {research['rationale'][:200]}")
+
+    if risk and (risk.get("spike_count", 0) > 0 or risk.get("circuit_open") or risk.get("alert_count", 0) > 0):
+        circuit = "🔴 OPEN" if risk.get("circuit_open") else "🟢 CLOSED"
+        if not lines:
+            lines.append("**🧠 Agent Intelligence**")
+        lines.append(f"⚠️ Risk: {risk.get('spike_count', 0)} spikes (15min) | Circuit: {circuit}")
+
+    return "\n".join(lines)
+
+
+async def send_digest_embed(
+    digest_text: str,
+    article_count: int = 0,
+    hours: int = 6,
+    signals: list[dict] | None = None,
+    risk: dict | None = None,
+) -> None:
     """POST a rich embed containing the market digest to Discord."""
     meta = f"⏱ Last {hours}h  |  📄 {article_count} Articles  |  🤖 Murff Alpha"
-    description = f"{_SEP}\n{digest_text}\n{_SEP}\n{meta}"
+    intel = _format_intelligence_section(signals, risk)
+    body = f"{digest_text}\n\n{intel}" if intel else digest_text
+    description = f"{_SEP}\n{body}\n{_SEP}\n{meta}"
 
     embed = {
         "title": "📰 AlphaOps — Market Digest",

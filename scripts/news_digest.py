@@ -15,24 +15,19 @@ import sys
 async def run(hours: int, dry_run: bool) -> None:
     from config.settings import get_settings
     from intelligence.discord_notifier import send_digest_embed
-    from intelligence.summarizer import fetch_recent_articles
+    from intelligence.summarizer import build_digest
 
     settings = get_settings()
     backend = f"Ollama ({settings.local_model})" if settings.use_local_llm else "Claude"
 
-    print(f"Fetching articles from the last {hours}h...")
-    articles = await fetch_recent_articles(hours=hours)
-    count = len(articles)
-    print(f"Found {count} article(s).")
+    print(f"Fetching articles and signals from the last {hours}h...")
+    digest, count, signals, risk = await build_digest(hours=hours)
 
     if count == 0:
         print("Nothing to summarise. Run 'make start' to verify DB, then let NewsHunter collect.")
         return
 
-    print(f"Generating digest with {backend}...\n")
-    from intelligence.summarizer import generate_digest
-
-    digest = await generate_digest(articles)
+    print(f"Found {count} article(s), {len(signals)} signal(s). Generating digest with {backend}...\n")
 
     print("─" * 60)
     print(digest)
@@ -44,7 +39,7 @@ async def run(hours: int, dry_run: bool) -> None:
 
     print("\nPosting to Discord...")
     try:
-        await send_digest_embed(digest, article_count=count, hours=hours)
+        await send_digest_embed(digest, article_count=count, hours=hours, signals=signals, risk=risk)
         print("✓ Posted successfully.")
     except ValueError as exc:
         print(f"✗ {exc}")

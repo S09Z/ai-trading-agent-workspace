@@ -79,17 +79,17 @@ async def test_send_digest_embed_includes_article_count(discord_mock):
     await send_digest_embed("Digest text", article_count=42)
 
     embed = discord_mock.call_args.kwargs["json"]["embeds"][0]
-    field_values = [f["value"] for f in embed["fields"]]
-    assert "42" in field_values
+    # article count is embedded in the description (not a separate field)
+    assert "42" in embed["description"]
 
 
-async def test_send_digest_embed_description_is_digest_text(discord_mock):
+async def test_send_digest_embed_description_contains_digest_text(discord_mock):
     from intelligence.discord_notifier import send_digest_embed
 
     await send_digest_embed("NVDA is bullish.", article_count=3)
 
     embed = discord_mock.call_args.kwargs["json"]["embeds"][0]
-    assert embed["description"] == "NVDA is bullish."
+    assert "NVDA is bullish." in embed["description"]
 
 
 async def test_send_digest_embed_has_timestamp(discord_mock):
@@ -99,3 +99,69 @@ async def test_send_digest_embed_has_timestamp(discord_mock):
 
     embed = discord_mock.call_args.kwargs["json"]["embeds"][0]
     assert "timestamp" in embed
+
+
+# ── _format_intelligence_section ──────────────────────────────────────────────
+
+def test_format_intelligence_section_empty_when_no_data():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    assert _format_intelligence_section(None, None) == ""
+    assert _format_intelligence_section([], {"spike_count": 0, "circuit_open": False, "alert_count": 0}) == ""
+
+
+def test_format_intelligence_section_shows_sentiment_signals():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    signals = [
+        {"ticker": "CRM", "signal_type": "bullish", "confidence": 0.82, "rationale": None},
+        {"ticker": "TSLA", "signal_type": "bearish", "confidence": 0.71, "rationale": None},
+    ]
+    result = _format_intelligence_section(signals, None)
+    assert "CRM" in result
+    assert "🟢" in result
+    assert "TSLA" in result
+    assert "🔴" in result
+
+
+def test_format_intelligence_section_shows_research():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    signals = [
+        {"ticker": "NVDA", "signal_type": "watchlist", "confidence": 0.5, "rationale": "Strong thesis here."},
+    ]
+    result = _format_intelligence_section(signals, None)
+    assert "🔬" in result
+    assert "NVDA" in result
+    assert "Strong thesis here." in result
+
+
+def test_format_intelligence_section_shows_risk_when_spikes():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    risk = {"spike_count": 3, "circuit_open": False, "alert_count": 0}
+    result = _format_intelligence_section([], risk)
+    assert "⚠️" in result
+    assert "3" in result
+
+
+def test_format_intelligence_section_circuit_open():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    risk = {"spike_count": 0, "circuit_open": True, "alert_count": 0}
+    result = _format_intelligence_section([], risk)
+    assert "🔴 OPEN" in result
+
+
+async def test_send_digest_embed_includes_intelligence_section(discord_mock):
+    from intelligence.discord_notifier import send_digest_embed
+
+    signals = [{"ticker": "AAPL", "signal_type": "bullish", "confidence": 0.75, "rationale": None}]
+    risk = {"spike_count": 1, "circuit_open": False, "alert_count": 0}
+
+    await send_digest_embed("Digest text", article_count=5, signals=signals, risk=risk)
+
+    desc = discord_mock.call_args.kwargs["json"]["embeds"][0]["description"]
+    assert "🧠 Agent Intelligence" in desc
+    assert "AAPL" in desc
+    assert "⚠️" in desc

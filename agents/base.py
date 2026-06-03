@@ -1,5 +1,8 @@
 import asyncio
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import func, select
 
 from memory.database import AgentLog, AsyncSessionLocal
 
@@ -24,6 +27,20 @@ class BaseAgent(ABC):
                 meta=meta or {},
             ))
             await session.commit()
+
+    async def is_halted(self) -> bool:
+        """Return True if the circuit breaker is open (RiskMonitor fired recently)."""
+        cutoff = datetime.now(UTC) - timedelta(minutes=15)
+        async with AsyncSessionLocal() as session:
+            count = (
+                await session.execute(
+                    select(func.count()).select_from(AgentLog).where(
+                        AgentLog.action == "circuit_breaker",
+                        AgentLog.created_at >= cutoff,
+                    )
+                )
+            ).scalar() or 0
+        return count > 0
 
     @abstractmethod
     async def run(self) -> None:
