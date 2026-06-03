@@ -24,7 +24,9 @@ def _uid() -> str:
 
 async def test_upsert_stores_document():
     doc_id = _uid()
-    await upsert(doc_id, "NVDA reports record GPU sales in Q4", {"ticker": "NVDA", "source": "test"})
+    await upsert(
+        doc_id, "NVDA reports record GPU sales in Q4", {"ticker": "NVDA", "source": "test"}
+    )
 
     results = await search("NVIDIA quarterly revenue", limit=5)
     ids = [r.get("source") for r in results]
@@ -52,7 +54,9 @@ async def test_upsert_stores_full_payload():
     await upsert(doc_id, "Tesla deliveries exceed expectations", payload)
 
     results = await search("Tesla delivery numbers", limit=5)
-    match = next((r for r in results if r.get("ticker") == "TSLA" and r.get("score") == 0.9), None)
+    match = next(
+        (r for r in results if r.get("ticker") == "TSLA" and r.get("score") == 0.9), None
+    )
     assert match is not None
     assert match["sentiment"] == "bullish"
 
@@ -86,7 +90,11 @@ async def test_search_returns_semantically_relevant_result():
     weather_id = _uid()
 
     await upsert_batch([
-        (earnings_id, "Microsoft Azure cloud revenue surges 30% in quarterly earnings", {"topic": "earnings"}),
+        (
+            earnings_id,
+            "Microsoft Azure cloud revenue surges 30% in quarterly earnings",
+            {"topic": "earnings"},
+        ),
         (weather_id, "Heavy snowfall disrupts travel across the northeast", {"topic": "weather"}),
     ])
 

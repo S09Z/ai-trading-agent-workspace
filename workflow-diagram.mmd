@@ -1,0 +1,134 @@
+---
+config:
+  theme: mc
+---
+flowchart TD
+
+    subgraph EXT["☁️ External Sources"]
+        NEWS["NewsAPI\nRSS Feeds"]
+        YF["Yahoo Finance\nyfinance"]
+    end
+
+    subgraph SCHED["⏰ Celery Beat — Scheduler"]
+        BEAT[/"Every 5 min · 1 min · 15 min · Daily"/]
+    end
+
+    subgraph COLLECT["📥 Collectors"]
+        NH["NewsHunter\nFetch · Deduplicate · Store"]
+        MW["MarketWatch\nOHLCV Polling · Spike Detect"]
+    end
+
+    subgraph INTEL["🧠 Intelligence"]
+        EMBED["Sentence Transformers\nall-MiniLM-L6-v2"]
+        CLAUDE["Claude API\nclaude-sonnet-4-6\nPrompt Caching ON"]
+    end
+
+    subgraph STORE["🗄️ Storage"]
+        PG[("PostgreSQL\n+ TimescaleDB\nArticles · Signals\nSnapshots · AgentLogs")]
+        QD[("Qdrant\nVector DB\nRAG Memory")]
+        RD[("Redis\nCache · Celery Queue")]
+    end
+
+    subgraph AGENTS["🤖 Agent Layer"]
+        ORC["🎯 Orchestrator\nRoute · Prioritise · Coordinate"]
+        SA["💬 SentimentAnalyst\nClassify · Score · Summarise"]
+        RA["🔬 ResearchAnalyst\nDeep-dive on trigger"]
+        RM["⚠️ RiskMonitor\nEarnings · Macro · VIX"]
+        RW["📝 ReportWriter\nDaily Summary"]
+    end
+
+    subgraph OUT["📊 Output"]
+        SIG[["Signals\nbullish · bearish · alert"]]
+        RPT[["Daily Report\nPDF / Markdown"]]
+    end
+
+    subgraph PRESENT["🖥️ Presentation Layer"]
+        API["FastAPI\n+ WebSocket"]
+        DASH["Next.js Dashboard\nMarket · News · Signals"]
+        VO["Virtual Office\nPixel-Art Agent View\n+ Activity Log"]
+    end
+
+    USER(["👤 User"])
+
+    %% ── Scheduling triggers ───────────────────────────────────
+    BEAT -->|"5 min"| NH
+    BEAT -->|"1 min"| MW
+    BEAT -->|"15 min"| RM
+    BEAT -->|"on schedule"| ORC
+
+    %% ── External → Collectors ────────────────────────────────
+    NEWS --> NH
+    YF --> MW
+
+    %% ── Collectors → Storage ─────────────────────────────────
+    NH -->|"raw articles"| PG
+    NH -->|"text"| EMBED
+    EMBED -->|"384-dim vectors"| QD
+    MW -->|"OHLCV candles"| PG
+
+    %% ── Orchestrator → Agents ────────────────────────────────
+    ORC --> SA
+    ORC --> RA
+    ORC --> RM
+    ORC --> RW
+
+    %% ── SentimentAnalyst pipeline ────────────────────────────
+    PG -->|"unanalysed articles"| SA
+    QD -->|"RAG context"| SA
+    SA <-->|"prompt / response"| CLAUDE
+    SA -->|"scored + embedded"| PG
+    SA -->|"new vectors"| QD
+
+    %% ── ResearchAnalyst pipeline ─────────────────────────────
+    QD -->|"RAG context"| RA
+    PG -->|"signals + history"| RA
+    RA <-->|"prompt / response"| CLAUDE
+
+    %% ── RiskMonitor pipeline ─────────────────────────────────
+    PG -->|"market snapshots"| RM
+
+    %% ── ReportWriter pipeline ────────────────────────────────
+    PG -->|"daily signals + logs"| RW
+    RW <-->|"prompt / response"| CLAUDE
+
+    %% ── Agent outputs ────────────────────────────────────────
+    SA -->|"signal"| SIG
+    RA -->|"signal"| SIG
+    RM -->|"alert signal"| SIG
+    RW --> RPT
+    SIG --> PG
+    RPT --> PG
+
+    %% ── Celery task queue ────────────────────────────────────
+    BEAT <-->|"task dispatch"| RD
+    RD <-->|"worker results"| ORC
+
+    %% ── Presentation ─────────────────────────────────────────
+    PG -->|"queries"| API
+    RD -->|"cached data"| API
+    API -->|"REST + WebSocket"| DASH
+    API -->|"agent event stream"| VO
+    DASH --> USER
+    VO --> USER
+    USER -->|"trigger research"| DASH
+
+    %% ── Styles ───────────────────────────────────────────────
+    classDef ext     fill:#1a1a2e,stroke:#e94560,color:#fff
+    classDef sched   fill:#16213e,stroke:#f5a623,color:#fff
+    classDef collect fill:#0f3460,stroke:#4fc3f7,color:#fff
+    classDef intel   fill:#1b1b2f,stroke:#a78bfa,color:#fff
+    classDef store   fill:#162032,stroke:#34d399,color:#fff
+    classDef agents  fill:#1a1a1a,stroke:#fb923c,color:#fff
+    classDef out     fill:#0d1117,stroke:#86efac,color:#fff
+    classDef present fill:#0f172a,stroke:#38bdf8,color:#fff
+    classDef user    fill:#1e293b,stroke:#fff,color:#fff
+
+    class NEWS,YF ext
+    class BEAT sched
+    class NH,MW collect
+    class EMBED,CLAUDE intel
+    class PG,QD,RD store
+    class ORC,SA,RA,RM,RW agents
+    class SIG,RPT out
+    class API,DASH,VO present
+    class USER user

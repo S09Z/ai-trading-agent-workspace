@@ -8,7 +8,6 @@ from sqlalchemy.exc import IntegrityError
 
 from memory.database import AgentLog, Article, MarketSnapshot, Signal
 
-
 # ── Article ────────────────────────────────────────────────────────────────────
 
 async def test_article_create_and_read(db_session):
@@ -107,7 +106,9 @@ async def test_signal_create(db_session):
 
 
 async def test_signal_default_meta(db_session):
-    signal = Signal(ticker="SPY", signal_type="watchlist", confidence=0.5, source_agent="risk_monitor")
+    signal = Signal(
+        ticker="SPY", signal_type="watchlist", confidence=0.5, source_agent="risk_monitor"
+    )
     db_session.add(signal)
     await db_session.commit()
     await db_session.refresh(signal)
@@ -150,7 +151,10 @@ async def test_agent_log_query_by_agent(db_session):
 
 async def test_market_snapshot_create(db_session):
     ts = datetime(2024, 1, 15, 14, 30, tzinfo=UTC)
-    snap = MarketSnapshot(ticker="AAPL", timestamp=ts, open=185.0, high=187.5, low=184.2, close=186.8, volume=52_000_000)
+    snap = MarketSnapshot(
+        ticker="AAPL", timestamp=ts,
+        open=185.0, high=187.5, low=184.2, close=186.8, volume=52_000_000,
+    )
     db_session.add(snap)
     await db_session.commit()
 
@@ -167,8 +171,14 @@ async def test_market_snapshot_composite_pk(db_session):
     """Different timestamps for the same ticker are distinct rows."""
     ts1 = datetime(2024, 1, 15, 14, 30, tzinfo=UTC)
     ts2 = datetime(2024, 1, 15, 14, 31, tzinfo=UTC)
-    db_session.add(MarketSnapshot(ticker="SPY", timestamp=ts1, open=470.0, high=471.0, low=469.5, close=470.5, volume=10_000_000))
-    db_session.add(MarketSnapshot(ticker="SPY", timestamp=ts2, open=470.5, high=472.0, low=470.0, close=471.8, volume=11_000_000))
+    db_session.add(MarketSnapshot(
+        ticker="SPY", timestamp=ts1,
+        open=470.0, high=471.0, low=469.5, close=470.5, volume=10_000_000,
+    ))
+    db_session.add(MarketSnapshot(
+        ticker="SPY", timestamp=ts2,
+        open=470.5, high=472.0, low=470.0, close=471.8, volume=11_000_000,
+    ))
     await db_session.commit()
 
     result = await db_session.execute(

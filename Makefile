@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start test test-cov lint fmt check clean reset
+.PHONY: help install up down restart logs ps start digest digest-dry test test-cov lint fmt check clean reset
 
 UV      := uv run
 COMPOSE := docker compose
@@ -38,6 +38,13 @@ reset: ## ⚠ Destroy volumes and restart fresh (wipes all data)
 # ── App ───────────────────────────────────────────────────────────────────────
 start: ## Run startup health check (DB + Qdrant + Claude)
 	$(UV) python main.py
+
+# ── Digest ────────────────────────────────────────────────────────────────────
+digest: ## Summarise recent news and post to Discord
+	$(UV) python -m scripts.news_digest
+
+digest-dry: ## Summarise recent news and print without posting
+	$(UV) python -m scripts.news_digest --dry-run
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 test: ## Run test suite

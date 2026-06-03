@@ -21,7 +21,7 @@ Agents (Orchestrator, NewsHunter, MarketWatch, Sentiment, Research, Risk, Report
     │
     ├── Intelligence: Claude API (analysis) + Qdrant (RAG memory)
     ├── Storage:      PostgreSQL/TimescaleDB (structured) · Redis (cache + queue)
-    └── Presentation: FastAPI + WebSocket · Next.js Dashboard · Virtual Office
+    └── Presentation: FastAPI + WebSocket · Agent Cockpit (Next.js) · Virtual Office
 ```
 
 ## Stack
@@ -34,7 +34,7 @@ Agents (Orchestrator, NewsHunter, MarketWatch, Sentiment, Research, Risk, Report
 | Database | PostgreSQL + TimescaleDB |
 | Cache / Queue | Redis + Celery |
 | API | FastAPI + WebSocket |
-| Dashboard | Next.js + Tailwind |
+| Agent Cockpit | Next.js + Tailwind |
 | Infrastructure | Docker Compose |
 
 ## Prerequisites
@@ -150,7 +150,7 @@ uv run poe check       # lint → test
 │   └── vector_store.py  # Qdrant RAG (upsert, upsert_batch, search)
 ├── api/                 # FastAPI app + WebSocket (Phase 4)
 ├── scheduler/           # Celery task definitions (Phase 2)
-├── dashboard/           # Next.js frontend (Phase 4)
+├── cockpit/             # Agent Cockpit — Next.js frontend (Phase 4)
 ├── tests/               # Test suite
 ├── docker-compose.yml   # PostgreSQL/TimescaleDB · Qdrant · Redis
 ├── Makefile             # Dev commands
@@ -166,12 +166,12 @@ uv run poe check       # lint → test
 | Qdrant | `6333` (REST) · `6334` (gRPC) | http://localhost:6333/dashboard |
 | Redis | `6379` | — |
 | FastAPI | `8000` | http://localhost:8000/docs |
-| Dashboard | `3000` | http://localhost:3000 |
+| Agent Cockpit | `3000` | <http://localhost:3000> |
 
 ## Build phases
 
 - **Phase 1** — Foundation: Docker services, config, database models, vector store, Claude client ✅
 - **Phase 2** — Data collection: NewsHunter, MarketWatch collectors, Celery scheduler
 - **Phase 3** — AI intelligence: SentimentAnalyst, ResearchAnalyst, RAG pipeline
-- **Phase 4** — Dashboard: FastAPI + WebSocket, Next.js UI, Virtual Office
+- **Phase 4** — Agent Cockpit: FastAPI + WebSocket, Next.js UI, Virtual Office
 - **Phase 5** — Deployment: VPS setup, Nginx, health checks

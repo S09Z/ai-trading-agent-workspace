@@ -27,15 +27,27 @@ async def startup() -> None:
         print(f"        FAIL — {e}")
         sys.exit(1)
 
-    # ── Claude API ─────────────────────────────────────────────────────────────
-    print("  [3/3] Claude API...")
-    try:
-        from intelligence.claude_client import analyze
-        reply = await analyze("Reply with exactly: OK")
-        print(f"        OK — response: {reply.strip()}")
-    except Exception as e:
-        print(f"        FAIL — {e}")
-        sys.exit(1)
+    # ── LLM connectivity ───────────────────────────────────────────────────────
+    from config.settings import get_settings
+    settings = get_settings()
+    if settings.use_local_llm:
+        print(f"  [3/3] Ollama ({settings.local_model})...")
+        try:
+            from intelligence.local_client import chat_local
+            reply = await chat_local("Reply with exactly: OK", max_tokens=10)
+            print(f"        OK — response: {reply.strip()}")
+        except Exception as e:
+            print(f"        FAIL — {e}")
+            sys.exit(1)
+    else:
+        print("  [3/3] Claude API...")
+        try:
+            from intelligence.claude_client import analyze
+            reply = await analyze("Reply with exactly: OK")
+            print(f"        OK — response: {reply.strip()}")
+        except Exception as e:
+            print(f"        FAIL — {e}")
+            sys.exit(1)
 
     print("\nAll systems ready.")
 
