@@ -58,6 +58,19 @@ def run_orchestrator() -> None:
     asyncio.run(OrchestratorAgent().run())
 
 
+@celery_app.task(name="scheduler.tasks.run_digest")
+def run_digest() -> None:
+    from intelligence.discord_notifier import send_digest_embed
+    from intelligence.summarizer import build_digest
+
+    async def _run() -> None:
+        digest, count, signals, risk = await build_digest(hours=6)
+        if count > 0:
+            await send_digest_embed(digest, article_count=count, hours=6, signals=signals, risk=risk)
+
+    asyncio.run(_run())
+
+
 # ── Beat schedule ──────────────────────────────────────────────────────────────
 
 celery_app.conf.beat_schedule = {
@@ -82,5 +95,9 @@ celery_app.conf.beat_schedule = {
     "research-analyst": {
         "task": "scheduler.tasks.run_research_analyst",
         "schedule": 3600.0,                                   # hourly deep dive
+    },
+    "digest": {
+        "task": "scheduler.tasks.run_digest",
+        "schedule": 21600.0,                                  # 6 hours
     },
 }

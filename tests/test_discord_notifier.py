@@ -1,4 +1,4 @@
-"""Tests for the Discord webhook notifier.
+"""Tests for the Discord notifier (Bot token REST API).
 
 All HTTP calls are mocked — no real requests sent.
 """
@@ -7,13 +7,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-_WEBHOOK = "https://discord.com/api/webhooks/test/token"
-_URL_PATCH = "intelligence.discord_notifier._webhook_url"
+_CHANNEL_ID = "111222333444555666"
+_TOKEN = "test-bot-token"
 _CLIENT_PATCH = "intelligence.discord_notifier.httpx.AsyncClient"
+_SETTINGS_PATCH = "intelligence.discord_notifier._settings"
 
 
 def _mock_client():
-    """Build an AsyncClient context manager that returns a no-op response."""
+    """Build an AsyncClient context manager that captures POST calls."""
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()
     mock_post = AsyncMock(return_value=mock_response)
@@ -23,11 +24,18 @@ def _mock_client():
     return ctx, mock_post
 
 
+def _mock_settings(token=_TOKEN, channel_id=_CHANNEL_ID):
+    s = MagicMock()
+    s.discord_bot_token = token
+    s.discord_digest_channel_id = channel_id
+    return s
+
+
 @pytest.fixture
 def discord_mock():
-    """Patch webhook URL + httpx client for all notifier tests."""
+    """Patch settings + httpx client for all notifier tests."""
     ctx, mock_post = _mock_client()
-    with patch(_URL_PATCH, return_value=_WEBHOOK), patch(_CLIENT_PATCH, return_value=ctx):
+    with patch(_SETTINGS_PATCH, _mock_settings()), patch(_CLIENT_PATCH, return_value=ctx):
         yield mock_post
 
 
@@ -43,12 +51,37 @@ async def test_send_message_posts_content(discord_mock):
     assert payload["content"] == "Hello from AlphaOps"
 
 
-async def test_send_message_raises_without_webhook():
+async def test_send_message_posts_to_digest_channel(discord_mock):
     from intelligence.discord_notifier import send_message
 
-    with patch("intelligence.discord_notifier._settings") as s:
-        s.discord_webhook_url = ""
-        with pytest.raises(ValueError, match="DISCORD_WEBHOOK_URL"):
+    await send_message("ping")
+
+    url = discord_mock.call_args.args[0]
+    assert _CHANNEL_ID in url
+
+
+async def test_send_message_uses_bot_auth_header(discord_mock):
+    from intelligence.discord_notifier import send_message
+
+    await send_message("ping")
+
+    headers = discord_mock.call_args.kwargs["headers"]
+    assert headers["Authorization"] == f"Bot {_TOKEN}"
+
+
+async def test_send_message_raises_without_token():
+    from intelligence.discord_notifier import send_message
+
+    with patch(_SETTINGS_PATCH, _mock_settings(token="")):
+        with pytest.raises(ValueError, match="DISCORD_BOT_TOKEN"):
+            await send_message("test")
+
+
+async def test_send_message_raises_without_channel_id():
+    from intelligence.discord_notifier import send_message
+
+    with patch(_SETTINGS_PATCH, _mock_settings(channel_id="")):
+        with pytest.raises(ValueError, match="DISCORD_DIGEST_CHANNEL_ID"):
             await send_message("test")
 
 
@@ -79,7 +112,6 @@ async def test_send_digest_embed_includes_article_count(discord_mock):
     await send_digest_embed("Digest text", article_count=42)
 
     embed = discord_mock.call_args.kwargs["json"]["embeds"][0]
-    # article count is embedded in the description (not a separate field)
     assert "42" in embed["description"]
 
 
@@ -99,6 +131,15 @@ async def test_send_digest_embed_has_timestamp(discord_mock):
 
     embed = discord_mock.call_args.kwargs["json"]["embeds"][0]
     assert "timestamp" in embed
+
+
+async def test_send_digest_embed_posts_to_digest_channel(discord_mock):
+    from intelligence.discord_notifier import send_digest_embed
+
+    await send_digest_embed("Test", article_count=1)
+
+    url = discord_mock.call_args.args[0]
+    assert _CHANNEL_ID in url
 
 
 # ── _format_intelligence_section ──────────────────────────────────────────────

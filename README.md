@@ -17,7 +17,7 @@ Results are pushed to Discord as a rich market digest every 6 hours, enriched wi
 
 ## Architecture
 
-```
+```text
 Agents (Orchestrator → NewsHunter · MarketWatch → SentimentAnalyst · RiskMonitor → ResearchAnalyst)
     │
     ├── Intelligence:   Claude API or Ollama (local LLM) · Qdrant (RAG vector store)
@@ -105,22 +105,13 @@ Copy `.env.example` to `.env` and set the following:
 
 ## Commands
 
+> Docker service management and production deployment commands are in [Infra.md](Infra.md).
+
 ### Setup
 
 | Command | Description |
 | --- | --- |
 | `make install` | Install all dependencies including dev tools |
-
-### Docker services
-
-| Command | Description |
-| --- | --- |
-| `make up` | Start PostgreSQL, Qdrant, and Redis (detached) |
-| `make down` | Stop all services |
-| `make restart` | Restart all services |
-| `make logs` | Follow logs for all services (Ctrl+C to stop) |
-| `make ps` | Show service status and health checks |
-| `make reset` | Destroy all volumes and restart fresh — **wipes all data** |
 
 ### App & agents
 
@@ -166,7 +157,7 @@ Interactive API docs: <http://localhost:8000/docs>
 
 ## Project structure
 
-```
+```text
 .
 ├── agents/              # Agent implementations
 │   ├── base.py          # BaseAgent with logging helper
@@ -208,16 +199,6 @@ Interactive API docs: <http://localhost:8000/docs>
 └── pyproject.toml       # Dependencies + Poe tasks + tool config
 ```
 
-## Services
-
-| Service | Port | UI |
-| --- | --- | --- |
-| PostgreSQL (TimescaleDB) | `5432` | — |
-| Qdrant | `6333` (REST) · `6334` (gRPC) | <http://localhost:6333/dashboard> |
-| Redis | `6379` | — |
-| Cockpit API | `8000` | <http://localhost:8000/docs> |
-| Cockpit UI (Next.js) | `3000` | <http://localhost:3000> |
-
 ## Build phases
 
 | Phase | Status | Scope |
@@ -227,4 +208,7 @@ Interactive API docs: <http://localhost:8000/docs>
 | 3 | ✅ Done | SentimentAnalyst, ResearchAnalyst, RiskMonitor, RAG pipeline, Discord digest upgrade |
 | 4A | ✅ Done | Cockpit backend — FastAPI REST + WebSocket (`make cockpit`) |
 | 4B | ✅ Done | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art (`make frontend`) |
-| 5 | 🔲 Next | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |
+| 5 | ✅ Done | VPS deployment — Nginx, Celery Beat, production Docker Compose, SSL via Let's Encrypt |
+| 6 | 🔜 Planned | Dashboard UI — candlestick charts, signal history table, agent performance metrics, mobile layout |
+| 7 | 🔜 Planned | Watchlist & strategy — configurable ticker watchlist, backtesting engine, signal confluence scoring, earnings calendar, model routing (haiku vs sonnet), structured LLM output |
+| 8 | 🔜 Planned | Live execution — Alpaca paper/live trading, TradeExecutor agent, position management (stop-loss/take-profit), P&L dashboard (Sharpe/drawdown/win rate), Discord `!halt` kill switch, RiskMonitor execution gate |

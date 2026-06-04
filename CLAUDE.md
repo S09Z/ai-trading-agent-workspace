@@ -77,7 +77,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 | 3 | ✅ Done | SentimentAnalyst, ResearchAnalyst, RiskMonitor, RAG pipeline, Discord digest upgrade |
 | 4A | ✅ Done | Cockpit backend — FastAPI REST + WebSocket (`make cockpit`, port 8000) |
 | 4B | ✅ Done | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art (`make frontend`, port 3000) |
-| 5 | 🔲 Next | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |
+| 5 | ✅ Done | VPS deployment — Nginx, Celery Beat, production Docker Compose, `make deploy` |
 
 ### Dev Commands
 
@@ -121,10 +121,19 @@ USE_LOCAL_LLM=false  # use Claude API (default)
 - [x] `frontend/components/SignalCard.tsx` — ticker, BUY/SELL/HOLD badge, confidence bar, rationale
 - [x] Agent sprites — idle / active (raises arms, monitor glows) / sleeping (dim + Z) / error (red flash)
 
-### Phase 5 — Deployment 🔲
+### Phase 5 — Deployment ✅
 
-- [ ] Celery Beat — schedule `cycle` every 5min, `digest` every 6h
-- [ ] Production `docker-compose.prod.yml` — add cockpit + frontend services
-- [ ] Nginx config — reverse proxy for API (`:8000`) and frontend (`:3000`)
-- [ ] VPS setup — env vars, SSL, systemd or Docker restart policy
-- [ ] Health endpoint monitoring
+- [x] Celery Beat — `run_digest` task added (every 6h), joins existing news/market/sentiment/risk/research schedule
+- [x] `Dockerfile` — Python 3.12 image for cockpit + celery-worker + celery-beat
+- [x] `frontend/Dockerfile` — multi-stage Next.js build (standalone output); `NEXT_PUBLIC_*` via build args
+- [x] `docker-compose.prod.yml` — all 8 services: postgres, qdrant, redis, cockpit, celery-worker, celery-beat, frontend, nginx
+- [x] `nginx/nginx.conf` — `/` → frontend:3000 · `/api/` → cockpit:8000 · `/ws/` → cockpit:8000 (WebSocket)
+- [x] `.env.prod.example` — production env template (no secrets)
+- [x] `make deploy` — pulls latest, rebuilds, restarts prod containers
+- [x] `GET /health` — now checks DB + Qdrant connectivity, returns `{"status": "ok|degraded", "db": "ok|error", "qdrant": "ok|error"}`
+
+### Phase 6 — Next
+
+- [ ] SSL — run certbot on VPS, uncomment SSL server block in `nginx/nginx.conf`
+- [ ] Monitoring — Prometheus `/metrics` or uptime ping on `GET /health`
+- [ ] Log shipping — forward container logs to a central sink (Loki, Datadog, etc.)

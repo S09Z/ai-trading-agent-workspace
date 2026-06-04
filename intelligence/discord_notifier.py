@@ -1,4 +1,4 @@
-"""Send messages and rich embeds to a Discord channel via webhook."""
+"""Send messages and rich embeds to Discord via Bot token REST API."""
 
 from datetime import UTC, datetime
 
@@ -10,21 +10,32 @@ _settings = get_settings()
 
 _EMBED_COLOR = 0x044104  # AlphaOps green
 _SEP = "─" * 35
+_API = "https://discord.com/api/v10"
 
 
-def _webhook_url() -> str:
-    if not _settings.discord_webhook_url:
-        raise ValueError(
-            "DISCORD_WEBHOOK_URL is not set in .env. "
-            "Get it from: Discord channel → Edit Channel → Integrations → Webhooks."
-        )
-    return _settings.discord_webhook_url
+def _headers() -> dict:
+    token = _settings.discord_bot_token
+    if not token:
+        raise ValueError("DISCORD_BOT_TOKEN is not set in .env")
+    return {"Authorization": f"Bot {token}"}
+
+
+def _channel_url(channel_id: str) -> str:
+    return f"{_API}/channels/{channel_id}/messages"
 
 
 async def send_message(content: str) -> None:
-    """POST a plain-text message to the configured Discord webhook."""
+    """POST a plain-text message to the digest channel."""
+    channel_id = _settings.discord_digest_channel_id
+    if not channel_id:
+        raise ValueError("DISCORD_DIGEST_CHANNEL_ID is not set in .env")
     async with httpx.AsyncClient() as client:
-        r = await client.post(_webhook_url(), json={"content": content}, timeout=10)
+        r = await client.post(
+            _channel_url(channel_id),
+            headers=_headers(),
+            json={"content": content},
+            timeout=10,
+        )
         r.raise_for_status()
 
 
@@ -35,7 +46,6 @@ def _format_intelligence_section(
     signals: list[dict] | None,
     risk: dict | None,
 ) -> str:
-    """Build the Agent Intelligence section. Returns empty string if nothing to show."""
     lines: list[str] = []
 
     sentiment = [s for s in (signals or []) if s["signal_type"] in ("bullish", "bearish")]
@@ -72,7 +82,11 @@ async def send_digest_embed(
     signals: list[dict] | None = None,
     risk: dict | None = None,
 ) -> None:
-    """POST a rich embed containing the market digest to Discord."""
+    """POST a rich embed to the digest channel."""
+    channel_id = _settings.discord_digest_channel_id
+    if not channel_id:
+        raise ValueError("DISCORD_DIGEST_CHANNEL_ID is not set in .env")
+
     meta = f"⏱ Last {hours}h  |  📄 {article_count} Articles  |  🤖 Murff Alpha"
     intel = _format_intelligence_section(signals, risk)
     body = f"{digest_text}\n\n{intel}" if intel else digest_text
@@ -86,5 +100,10 @@ async def send_digest_embed(
         "timestamp": datetime.now(UTC).isoformat(),
     }
     async with httpx.AsyncClient() as client:
-        r = await client.post(_webhook_url(), json={"embeds": [embed]}, timeout=10)
+        r = await client.post(
+            _channel_url(channel_id),
+            headers=_headers(),
+            json={"embeds": [embed]},
+            timeout=10,
+        )
         r.raise_for_status()

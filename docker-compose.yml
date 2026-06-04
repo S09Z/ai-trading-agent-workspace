@@ -35,7 +35,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6780:6379"
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
@@ -44,6 +44,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uv run python -m intelligence.discord_bot
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
     restart: unless-stopped
 
 volumes:

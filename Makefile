@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend cycle sentiment digest digest-dry test test-cov lint fmt check clean reset
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker cycle sentiment digest digest-dry test test-cov lint fmt check clean reset deploy ssl-init ssl-renew
 
 UV      := uv run
 COMPOSE := docker compose
@@ -45,6 +45,12 @@ cockpit: ## Start Agent Cockpit API server (port 8000)
 frontend: ## Start Next.js frontend dev server (port 3000)
 	cd frontend && npm run dev
 
+discord-bot: ## Start Discord bot (listens for !commands)
+	$(UV) python -m intelligence.discord_bot
+
+celery-worker: ## Start Celery worker (processes queued tasks)
+	PYTHONPATH=. $(UV) celery -A scheduler.tasks:celery_app worker --loglevel=info
+
 # ── Agents ────────────────────────────────────────────────────────────────────
 cycle: ## Run full agent cycle (NewsHunter → MarketWatch → Sentiment → Risk → Research)
 	$(UV) python -m scripts.run_cycle
@@ -74,6 +80,29 @@ fmt: ## Format with ruff
 
 check: ## Run lint + full test suite
 	$(UV) poe check
+
+# ── Production ────────────────────────────────────────────────────────────────
+deploy: ## Pull latest, rebuild, and restart all production containers
+	git pull
+	docker compose -f docker-compose.prod.yml build --pull
+	docker compose -f docker-compose.prod.yml up -d
+
+ssl-init: ## Obtain Let's Encrypt cert (requires APP_ENV=production and DOMAIN= in .env.prod)
+	@grep -q 'APP_ENV=production' .env.prod 2>/dev/null || \
+		(echo "Error: set APP_ENV=production in .env.prod before running ssl-init" && exit 1)
+	@grep -q 'DOMAIN=' .env.prod 2>/dev/null || \
+		(echo "Error: set DOMAIN=your.domain in .env.prod before running ssl-init" && exit 1)
+	$(eval DOMAIN := $(shell grep '^DOMAIN=' .env.prod | cut -d= -f2))
+	docker compose -f docker-compose.prod.yml run --rm certbot certonly \
+		--webroot --webroot-path /var/www/certbot \
+		--email admin@$(DOMAIN) --agree-tos --no-eff-email \
+		-d $(DOMAIN)
+	docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+	@echo "SSL enabled for $(DOMAIN). Update NEXT_PUBLIC_API_URL=https://$(DOMAIN)/api and NEXT_PUBLIC_WS_URL=wss://$(DOMAIN)/ws in .env.prod, then run: make deploy"
+
+ssl-renew: ## Renew SSL certificates and reload nginx
+	docker compose -f docker-compose.prod.yml run --rm certbot renew --quiet
+	docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
 clean: ## Remove __pycache__, .pytest_cache, .ruff_cache
