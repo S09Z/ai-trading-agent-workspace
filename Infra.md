@@ -12,6 +12,8 @@ Managed by `docker-compose.yml` — PostgreSQL/TimescaleDB, Qdrant, Redis.
 | `make logs` | Follow logs (Ctrl+C to stop) |
 | `make ps` | Show service status and health checks |
 | `make reset` | ⚠ Destroy all volumes and restart — **wipes all data** |
+| `make discord-bot` | Start Discord bot (listens for `!commands`) |
+| `make celery-worker` | Start Celery worker (processes queued tasks) |
 
 ## Service ports
 
@@ -19,7 +21,7 @@ Managed by `docker-compose.yml` — PostgreSQL/TimescaleDB, Qdrant, Redis.
 | --- | --- | --- |
 | PostgreSQL (TimescaleDB) | `5432` | — |
 | Qdrant | `6333` (REST) · `6334` (gRPC) | <http://localhost:6333/dashboard> |
-| Redis | `6379` | — |
+| Redis | `6780` | — |
 | Cockpit API | `8000` | <http://localhost:8000/docs> |
 | Cockpit UI (Next.js) | `3000` | <http://localhost:3000> |
 
@@ -27,7 +29,7 @@ Managed by `docker-compose.yml` — PostgreSQL/TimescaleDB, Qdrant, Redis.
 
 ## Production deployment
 
-Managed by `docker-compose.prod.yml` — 8 services: postgres, qdrant, redis, cockpit, celery-worker, celery-beat, frontend, nginx.
+Managed by `docker-compose.prod.yml` — 9 services: postgres, qdrant, redis, cockpit, celery-worker, celery-beat, frontend, nginx, discord-bot.
 
 ### Setup
 
@@ -99,6 +101,7 @@ Minimum VPS: 2 vCPU / 4 GB RAM / 40 GB SSD
 | **celery-beat** | 0.01 vCPU | 80 – 120 MB | — |
 | **frontend** (Next.js standalone) | 0.02 / 0.1 vCPU | 150 – 250 MB | — |
 | **nginx** | 0.01 vCPU | 30 – 50 MB | — |
+| **discord-bot** | 0.01 / 0.05 vCPU | 80 – 150 MB | — |
 | OS + Docker daemon | — | ~300 MB | — |
 
 > **celery-worker** is the heaviest service. It loads a sentence-transformers embedding model (~400 MB) on startup and runs CPU-bound inference during each agent cycle. Peak CPU spikes to ~1.5 vCPU for 10–30 s per cycle.

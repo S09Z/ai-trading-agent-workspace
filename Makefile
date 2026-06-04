@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend discord-bot cycle sentiment digest digest-dry test test-cov lint fmt check clean reset deploy ssl-init ssl-renew
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker cycle sentiment digest digest-dry test test-cov lint fmt check clean reset deploy ssl-init ssl-renew
 
 UV      := uv run
 COMPOSE := docker compose
@@ -47,6 +47,9 @@ frontend: ## Start Next.js frontend dev server (port 3000)
 
 discord-bot: ## Start Discord bot (listens for !commands)
 	$(UV) python -m intelligence.discord_bot
+
+celery-worker: ## Start Celery worker (processes queued tasks)
+	PYTHONPATH=. $(UV) celery -A scheduler.tasks:celery_app worker --loglevel=info
 
 # ── Agents ────────────────────────────────────────────────────────────────────
 cycle: ## Run full agent cycle (NewsHunter → MarketWatch → Sentiment → Risk → Research)
