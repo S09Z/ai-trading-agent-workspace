@@ -1,0 +1,157 @@
+name: murff-alpha-ops-prod
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────────────────
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-alphaops}
+      POSTGRES_USER: ${POSTGRES_USER:-alphaops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alphaops}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/ > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ── Application ───────────────────────────────────────────────────────────────
+
+  cockpit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uv run uvicorn cockpit.app:app --host 0.0.0.0 --port 8000
+    env_file: .env.prod
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uv run celery -A scheduler.tasks worker --loglevel=info
+    env_file: .env.prod
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uv run celery -A scheduler.tasks beat --loglevel=info
+    env_file: .env.prod
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost/ws}
+    restart: unless-stopped
+
+  discord-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: uv run python -m intelligence.discord_bot
+    env_file: .env.prod
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Reverse proxy ─────────────────────────────────────────────────────────────
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./nginx/entrypoint.sh:/entrypoint.sh:ro
+      - ./nginx/nginx.conf:/etc/nginx/templates/nginx.conf:ro
+      - ./nginx/nginx-ssl.conf:/etc/nginx/templates/nginx-ssl.conf:ro
+      - letsencrypt_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    depends_on:
+      - cockpit
+      - frontend
+    restart: unless-stopped
+
+  # Run on demand only — not started by `make deploy`
+  # Usage: make ssl-init DOMAIN=your.domain  |  make ssl-renew
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - letsencrypt_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    profiles: ["certbot"]
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  redis_data:
+  letsencrypt_conf:
+  certbot_www:

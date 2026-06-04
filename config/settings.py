@@ -71,7 +71,9 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
 
     # ── Discord ────────────────────────────────────────────────────────────────
-    discord_webhook_url: str = ""  # optional — set to enable digest notifications
+    discord_bot_token: str = ""
+    discord_digest_channel_id: str = ""
+    discord_bot_channel_id: str = ""
 
     # ── FastAPI ────────────────────────────────────────────────────────────────
     api_host: str = "0.0.0.0"
