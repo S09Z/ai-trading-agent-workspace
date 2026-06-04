@@ -18,11 +18,25 @@ RSS_FEEDS: dict[str, str] = {
 }
 
 
+# Company name aliases so "Amazon" matches AMZN, "Nvidia" matches NVDA, etc.
+_ALIASES: dict[str, list[str]] = {
+    "AAPL": ["Apple"],
+    "TSLA": ["Tesla"],
+    "NVDA": ["Nvidia", "NVIDIA"],
+    "MSFT": ["Microsoft"],
+    "AMZN": ["Amazon"],
+    "META": ["Meta", "Facebook"],
+    "GOOGL": ["Google", "Alphabet"],
+    "NFLX": ["Netflix"],
+}
+
+
 def _extract_tickers(text: str) -> list[str]:
-    """Return watchlist tickers mentioned in text (case-insensitive whole-word match)."""
+    """Return watchlist tickers mentioned in text (ticker symbol or company name match)."""
     found = []
     for ticker in _settings.watchlist:
-        if re.search(rf"\b{re.escape(ticker)}\b", text, re.IGNORECASE):
+        terms = [ticker] + _ALIASES.get(ticker, [])
+        if any(re.search(rf"\b{re.escape(t)}\b", text, re.IGNORECASE) for t in terms):
             found.append(ticker)
     return found
 
