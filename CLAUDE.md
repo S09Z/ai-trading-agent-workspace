@@ -76,14 +76,15 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 | 2 | ✅ Done | NewsHunter, MarketWatch, BaseAgent, Celery scheduler, summarizer, Discord notifier |
 | 3 | ✅ Done | SentimentAnalyst, ResearchAnalyst, RiskMonitor, RAG pipeline, Discord digest upgrade |
 | 4A | ✅ Done | Cockpit backend — FastAPI REST + WebSocket (`make cockpit`, port 8000) |
-| 4B | 🔲 Next | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art |
-| 5 | 🔲 Planned | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |
+| 4B | ✅ Done | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art (`make frontend`, port 3000) |
+| 5 | 🔲 Next | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |
 
 ### Dev Commands
 
 ```bash
 make start        # health check (DB + Qdrant + LLM)
 make cockpit      # start FastAPI backend (port 8000, --reload)
+make frontend     # start Next.js frontend (port 3000)
 make cycle        # full agent cycle: NewsHunter → MarketWatch → Sentiment → Risk → Research
 make sentiment    # SentimentAnalyst only (after NewsHunter has run)
 make digest       # generate + post Discord digest
@@ -110,14 +111,15 @@ USE_LOCAL_LLM=false  # use Claude API (default)
 - [x] `WS /logs/ws` — real-time stream (polls DB every 2s, pushes new rows)
 - [x] 12 endpoint tests, 137 total passing
 
-### Phase 4B — Cockpit Frontend 🔲
+### Phase 4B — Cockpit Frontend ✅
 
-- [ ] `frontend/` — Next.js app (`npx create-next-app`)
-- [ ] Market Dashboard page — signal cards, agent status badges, news feed
-- [ ] Virtual Office page — HTML Canvas pixel-art room
-- [ ] Agent sprites — one per agent, states: idle / active / sleeping / error
-- [ ] WebSocket consumer — connect `ws://localhost:8000/logs/ws`, animate sprites on new log events
-- [ ] Activity Log panel — scrolling feed beside the office canvas
+- [x] `frontend/` — Next.js 16 + React 19 + Tailwind v4 (`make frontend`, port 3000)
+- [x] `frontend/app/page.tsx` — Market Dashboard: signal cards, agent status badges, live activity log
+- [x] `frontend/app/office/page.tsx` — Virtual Office: pixel-art Canvas room
+- [x] `frontend/components/VirtualOffice.tsx` — HTML Canvas, one sprite per agent, RAF draw loop
+- [x] `frontend/components/ActivityLog.tsx` — WebSocket consumer (`ws://localhost:8000/logs/ws`), auto-scrolling
+- [x] `frontend/components/SignalCard.tsx` — ticker, BUY/SELL/HOLD badge, confidence bar, rationale
+- [x] Agent sprites — idle / active (raises arms, monitor glows) / sleeping (dim + Z) / error (red flash)
 
 ### Phase 5 — Deployment 🔲
 

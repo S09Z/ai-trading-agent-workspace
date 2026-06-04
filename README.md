@@ -23,7 +23,8 @@ Agents (Orchestrator → NewsHunter · MarketWatch → SentimentAnalyst · RiskM
     ├── Intelligence:   Claude API or Ollama (local LLM) · Qdrant (RAG vector store)
     ├── Storage:        PostgreSQL/TimescaleDB · Redis (cache + task queue)
     ├── Notifications:  Discord webhook (market digest + Agent Intelligence)
-    └── Cockpit API:    FastAPI + WebSocket (port 8000)
+    ├── Cockpit API:    FastAPI + WebSocket (port 8000)
+    └── Cockpit UI:     Next.js Market Dashboard + Virtual Office pixel-art (port 3000)
 ```
 
 ## Stack
@@ -36,7 +37,7 @@ Agents (Orchestrator → NewsHunter · MarketWatch → SentimentAnalyst · RiskM
 | Database | PostgreSQL + TimescaleDB |
 | Cache / Queue | Redis + Celery |
 | Cockpit API | FastAPI + WebSocket |
-| Agent Cockpit UI | Next.js + Tailwind (Phase 4B) |
+| Cockpit UI | Next.js 16 + React 19 + Tailwind v4 |
 | Infrastructure | Docker Compose |
 
 ## Prerequisites
@@ -66,13 +67,16 @@ make up
 # 5. Verify all services connect
 make start
 
-# 6. Collect news articles
-uv run python -c "import asyncio; from agents.news_hunter import NewsHunterAgent; asyncio.run(NewsHunterAgent().run())"
-
-# 7. Run a full agent cycle (collect → analyse → research)
+# 6. Run a full agent cycle (collect → analyse → research)
 make cycle
 
-# 8. Post a digest to Discord
+# 7. Start the backend API
+make cockpit   # → http://localhost:8000
+
+# 8. Start the frontend dashboard
+make frontend  # → http://localhost:3000
+
+# 9. Post a digest to Discord
 make digest
 ```
 
@@ -124,6 +128,7 @@ Copy `.env.example` to `.env` and set the following:
 | --- | --- |
 | `make start` | Startup health check (DB + Qdrant + LLM) |
 | `make cockpit` | Start Agent Cockpit API server (port 8000, hot-reload) |
+| `make frontend` | Start Next.js dashboard (port 3000) |
 | `make cycle` | Full agent cycle: NewsHunter → MarketWatch → SentimentAnalyst → RiskMonitor → ResearchAnalyst |
 | `make sentiment` | Run SentimentAnalyst only (use after NewsHunter has collected articles) |
 | `make digest` | Generate market digest and post to Discord |
@@ -175,6 +180,11 @@ Interactive API docs: <http://localhost:8000/docs>
 │   ├── app.py           # FastAPI app + CORS
 │   ├── schemas.py       # Pydantic response models
 │   └── routers/         # agents · signals · logs (REST + WebSocket)
+├── frontend/            # Next.js 16 dashboard (Market Dashboard + Virtual Office)
+│   ├── app/page.tsx     # Market Dashboard — signals, agent status, activity log
+│   ├── app/office/      # Virtual Office — pixel-art Canvas room
+│   ├── components/      # SignalCard · AgentStatusBadge · ActivityLog · VirtualOffice
+│   └── lib/             # API client + TypeScript types
 ├── intelligence/
 │   ├── claude_client.py # Anthropic SDK wrapper
 │   ├── local_client.py  # Ollama wrapper (local LLM)
@@ -206,7 +216,7 @@ Interactive API docs: <http://localhost:8000/docs>
 | Qdrant | `6333` (REST) · `6334` (gRPC) | <http://localhost:6333/dashboard> |
 | Redis | `6379` | — |
 | Cockpit API | `8000` | <http://localhost:8000/docs> |
-| Agent Cockpit UI | `3000` (Phase 4B) | <http://localhost:3000> |
+| Cockpit UI (Next.js) | `3000` | <http://localhost:3000> |
 
 ## Build phases
 
@@ -216,5 +226,5 @@ Interactive API docs: <http://localhost:8000/docs>
 | 2 | ✅ Done | NewsHunter, MarketWatch, Celery scheduler, summarizer, Discord notifier |
 | 3 | ✅ Done | SentimentAnalyst, ResearchAnalyst, RiskMonitor, RAG pipeline, Discord digest upgrade |
 | 4A | ✅ Done | Cockpit backend — FastAPI REST + WebSocket (`make cockpit`) |
-| 4B | 🔲 Next | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art |
-| 5 | 🔲 Planned | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |
+| 4B | ✅ Done | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art (`make frontend`) |
+| 5 | 🔲 Next | VPS deployment — Nginx, Celery beat scheduler, production Docker Compose |

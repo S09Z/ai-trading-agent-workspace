@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit cycle sentiment digest digest-dry test test-cov lint fmt check clean reset
+.PHONY: help install up down restart logs ps start cockpit frontend cycle sentiment digest digest-dry test test-cov lint fmt check clean reset
 
 UV      := uv run
 COMPOSE := docker compose
@@ -41,6 +41,9 @@ start: ## Run startup health check (DB + Qdrant + LLM)
 
 cockpit: ## Start Agent Cockpit API server (port 8000)
 	$(UV) uvicorn cockpit.app:app --reload --port 8000
+
+frontend: ## Start Next.js frontend dev server (port 3000)
+	cd frontend && npm run dev
 
 # ── Agents ────────────────────────────────────────────────────────────────────
 cycle: ## Run full agent cycle (NewsHunter → MarketWatch → Sentiment → Risk → Research)

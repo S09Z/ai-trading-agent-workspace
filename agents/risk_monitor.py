@@ -27,7 +27,7 @@ class RiskMonitorAgent(BaseAgent):
     async def run(self) -> None:
         spike_count = await self._recent_spike_count()
 
-        if spike_count >= CIRCUIT_THRESHOLD:
+        if spike_count > CIRCUIT_THRESHOLD:
             await self.log(
                 "circuit_breaker",
                 f"Circuit OPEN — {spike_count} spikes in last {SPIKE_WINDOW}min, agents paused",
