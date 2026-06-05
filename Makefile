@@ -43,7 +43,7 @@ cockpit: ## Start Agent Cockpit API server (port 8000)
 	$(UV) uvicorn cockpit.app:app --reload --port 8000
 
 frontend: ## Start Next.js frontend dev server (port 3000)
-	cd frontend && npm run dev
+	-lsof -ti:3000 | xargs kill -9 2>/dev/null; cd frontend && pnpm dev
 
 discord-bot: ## Start Discord bot (listens for !commands)
 	$(UV) python -m intelligence.discord_bot
