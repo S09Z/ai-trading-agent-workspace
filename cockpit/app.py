@@ -3,6 +3,7 @@
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 
 from cockpit.routers import agents, logs, signals
@@ -21,6 +22,8 @@ app.add_middleware(
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(signals.router, prefix="/signals", tags=["signals"])
 app.include_router(logs.router, prefix="/logs", tags=["logs"])
+
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 
 @app.get("/health")

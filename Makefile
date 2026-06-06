@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker cycle sentiment digest digest-dry test test-cov lint fmt check clean reset deploy ssl-init ssl-renew
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker cycle sentiment digest digest-dry test test-cov lint fmt check clean reset deploy ssl-init ssl-renew monitoring
 
 UV      := uv run
 COMPOSE := docker compose
@@ -102,6 +102,10 @@ ssl-init: ## Obtain Let's Encrypt cert (requires APP_ENV=production and DOMAIN= 
 
 ssl-renew: ## Renew SSL certificates and reload nginx
 	docker compose -f docker-compose.prod.yml run --rm certbot renew --quiet
+
+monitoring: ## Open Prometheus UI (prod — port-forwards 9090)
+	docker compose -f docker-compose.prod.yml exec prometheus wget -qO- http://localhost:9090/-/ready && \
+		echo "Prometheus ready — visit http://localhost:9090" || echo "Start prod stack first: make deploy"
 	docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
