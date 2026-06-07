@@ -58,6 +58,22 @@ def run_orchestrator() -> None:
     asyncio.run(OrchestratorAgent().run())
 
 
+# ── Financial analysis tasks ───────────────────────────────────────────────────
+
+@celery_app.task(name="scheduler.tasks.run_financial_analyst")
+def run_financial_analyst(ticker: str | None = None) -> None:
+    from agents.financial_analyst import FinancialAnalystAgent
+    asyncio.run(FinancialAnalystAgent().run(ticker=ticker))
+
+
+# ── Phase 7 tasks ──────────────────────────────────────────────────────────────
+
+@celery_app.task(name="scheduler.tasks.run_memory_agent")
+def run_memory_agent() -> None:
+    from agents.memory_agent import MemoryAgent
+    asyncio.run(MemoryAgent().run())
+
+
 @celery_app.task(name="scheduler.tasks.run_digest")
 def run_digest() -> None:
     from intelligence.discord_notifier import send_digest_embed
@@ -99,5 +115,15 @@ celery_app.conf.beat_schedule = {
     "digest": {
         "task": "scheduler.tasks.run_digest",
         "schedule": 21600.0,                                  # 6 hours
+    },
+    # Phase 7 — agent memory
+    "memory-agent": {
+        "task": "scheduler.tasks.run_memory_agent",
+        "schedule": 86400.0,                                  # daily
+    },
+    # Financial analysis
+    "financial-analyst": {
+        "task": "scheduler.tasks.run_financial_analyst",
+        "schedule": 86400.0,                                  # daily (financials update quarterly)
     },
 }

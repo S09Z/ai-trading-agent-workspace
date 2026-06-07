@@ -22,5 +22,8 @@ export interface SignalOut {
   confidence: number;
   source_agent: string;
   rationale: string | null;
+  grade_short: string | null;
+  grade_mid: string | null;
+  grade_long: string | null;
   created_at: string;
 }

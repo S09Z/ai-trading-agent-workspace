@@ -1,5 +1,12 @@
 name: murff-alpha-ops-prod
 
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 services:
   # ── Infrastructure ────────────────────────────────────────────────────────────
 
@@ -17,6 +24,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    <<: *default-logging
 
   qdrant:
     image: qdrant/qdrant:v1.17.0
@@ -28,6 +36,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    <<: *default-logging
 
   redis:
     image: redis:7-alpine
@@ -40,6 +49,7 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    <<: *default-logging
 
   # ── Application ───────────────────────────────────────────────────────────────
 
@@ -61,6 +71,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    <<: *default-logging
 
   celery-worker:
     build:
@@ -78,6 +89,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    <<: *default-logging
 
   celery-beat:
     build:
@@ -93,6 +105,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    <<: *default-logging
 
   frontend:
     build:
@@ -102,6 +115,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost/ws}
     restart: unless-stopped
+    <<: *default-logging
 
   discord-bot:
     build:
@@ -117,6 +131,7 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    <<: *default-logging
 
   # ── Reverse proxy ─────────────────────────────────────────────────────────────
 
@@ -139,6 +154,21 @@ services:
       - cockpit
       - frontend
     restart: unless-stopped
+    <<: *default-logging
+
+  # ── Monitoring ────────────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    <<: *default-logging
 
   # Run on demand only — not started by `make deploy`
   # Usage: make ssl-init DOMAIN=your.domain  |  make ssl-renew
@@ -155,3 +185,4 @@ volumes:
   redis_data:
   letsencrypt_conf:
   certbot_www:
+  prometheus_data:

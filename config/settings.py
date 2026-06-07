@@ -58,7 +58,8 @@ class Settings(BaseSettings):
 
     # ── Market watchlist ───────────────────────────────────────────────────────
     watchlist: list[str] = Field(
-        default=["AAPL", "TSLA", "NVDA", "MSFT", "SPY", "QQQ", "AMZN", "META"]
+        default=["AAPL", "TSLA", "NVDA", "MSFT", "SPY", "QQQ", "AMZN", "META",
+                 "USO", "GLD", "TLT", "DXY"]   # macro: oil, gold, bonds, dollar
     )
 
     # ── Embeddings (sentence-transformers, runs locally — no API key needed) ──

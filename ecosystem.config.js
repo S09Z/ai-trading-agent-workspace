@@ -1,0 +1,55 @@
+const path = require("path");
+const cwd = __dirname;
+
+module.exports = {
+  apps: [
+    {
+      name: "cockpit",
+      script: "uv",
+      args: "run uvicorn cockpit.app:app --port 8000",
+      cwd,
+      interpreter: "none",
+      autorestart: true,
+      watch: false,
+      error_file: "logs/pm2/cockpit.err.log",
+      out_file: "logs/pm2/cockpit.out.log",
+      env: { PYTHONPATH: cwd },
+    },
+    {
+      name: "celery-worker",
+      script: "uv",
+      args: "run celery -A scheduler.tasks:celery_app worker --loglevel=info",
+      cwd,
+      interpreter: "none",
+      autorestart: true,
+      watch: false,
+      error_file: "logs/pm2/celery-worker.err.log",
+      out_file: "logs/pm2/celery-worker.out.log",
+      env: { PYTHONPATH: cwd },
+    },
+    {
+      name: "celery-beat",
+      script: "uv",
+      args: "run celery -A scheduler.tasks:celery_app beat --loglevel=info",
+      cwd,
+      interpreter: "none",
+      autorestart: true,
+      watch: false,
+      error_file: "logs/pm2/celery-beat.err.log",
+      out_file: "logs/pm2/celery-beat.out.log",
+      env: { PYTHONPATH: cwd },
+    },
+    {
+      name: "discord-bot",
+      script: "uv",
+      args: "run python -m intelligence.discord_bot",
+      cwd,
+      interpreter: "none",
+      autorestart: true,
+      watch: false,
+      error_file: "logs/pm2/discord-bot.err.log",
+      out_file: "logs/pm2/discord-bot.out.log",
+      env: { PYTHONPATH: cwd },
+    },
+  ],
+};

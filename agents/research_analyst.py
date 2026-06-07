@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
@@ -10,6 +11,16 @@ from memory.vector_store import search
 _settings = get_settings()
 
 _SYSTEM = "You are a senior equity analyst. Be concise and direct."
+
+_VALID_GRADES = {"S", "A", "B", "C"}
+
+
+def _parse_grades(text: str) -> tuple[str | None, str | None, str | None]:
+    """Extract SHORT/MID/LONG grades from LLM response text."""
+    def _find(label: str) -> str | None:
+        m = re.search(rf"{label}[:\s]+([SABC])", text, re.IGNORECASE)
+        return m.group(1).upper() if m and m.group(1).upper() in _VALID_GRADES else None
+    return _find("SHORT"), _find("MID"), _find("LONG")
 
 
 class ResearchAnalystAgent(BaseAgent):
@@ -26,10 +37,27 @@ class ResearchAnalystAgent(BaseAgent):
             await self.log("research", f"No RAG context found for {target}")
             return
 
-        context = "\n".join(f"- {d.get('title', '')}" for d in docs if d.get("title"))
+        news_context = "\n".join(f"- {d.get('title', '')}" for d in docs if d.get("title"))
+
+        # Pull past signal outcomes for this ticker from memory
+        memory_docs = await search(f"{target} signal outcome correct incorrect", limit=4)
+        memory_lines = [
+            d["outcome_summary"]
+            for d in memory_docs
+            if d.get("type") == "signal_outcome" and d.get("ticker") == target
+        ]
+        memory_section = (
+            "\n\nPast signal outcomes:\n" + "\n".join(f"- {l}" for l in memory_lines)
+            if memory_lines else ""
+        )
+
         prompt = (
-            f"Ticker: {target}\n\nRecent news:\n{context}\n\n"
-            "Write a 3-sentence investment thesis: directional bias, key risk, near-term catalyst."
+            f"Ticker: {target}\n\nRecent news:\n{news_context}{memory_section}\n\n"
+            "Write a 3-sentence investment thesis: directional bias, key risk, near-term catalyst.\n\n"
+            "Then grade the outlook for each time horizon (S=Strong Buy, A=Buy, B=Hold, C=Sell):\n"
+            "SHORT: <grade>\n"
+            "MID: <grade>\n"
+            "LONG: <grade>"
         )
 
         if _settings.use_local_llm:
@@ -41,6 +69,8 @@ class ResearchAnalystAgent(BaseAgent):
 
             analysis = await analyze(prompt, max_tokens=200)
 
+        gs, gm, gl = _parse_grades(analysis)
+
         async with AsyncSessionLocal() as session:
             session.add(Signal(
                 ticker=target,
@@ -48,6 +78,9 @@ class ResearchAnalystAgent(BaseAgent):
                 confidence=0.5,
                 source_agent=self.name,
                 rationale=analysis[:500],
+                grade_short=gs,
+                grade_mid=gm,
+                grade_long=gl,
             ))
             await session.commit()
 

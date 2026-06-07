@@ -110,6 +110,57 @@ async def test_run_skips_signal_for_neutral_score(db_session, db_engine):
     assert signals == []
 
 
+async def test_run_creates_signal_with_grades(db_session, db_engine):
+    from agents.sentiment_analyst import SentimentAnalystAgent
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        s.add(_article(0, tickers=["AAPL"]))
+        await s.commit()
+
+    with patch("agents.sentiment_analyst.analyze_sentiment",
+               new=AsyncMock(return_value={"sentiment": "bullish", "score": 0.85})):
+        await SentimentAnalystAgent().run()
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        sig = (await s.execute(
+            select(Signal).where(Signal.ticker == "AAPL")
+        )).scalars().first()
+
+    assert sig.grade_short == "S"
+    assert sig.grade_mid == "A"
+    assert sig.grade_long == "B"
+
+
+def test_grades_bullish_high_confidence():
+    from agents.sentiment_analyst import _grades
+    assert _grades("bullish", 0.85) == ("S", "A", "B")
+
+
+def test_grades_bullish_moderate_confidence():
+    from agents.sentiment_analyst import _grades
+    assert _grades("bullish", 0.70) == ("A", "B", "B")
+
+
+def test_grades_bearish_high_confidence():
+    from agents.sentiment_analyst import _grades
+    gs, gm, gl = _grades("bearish", 0.85)
+    assert gs == "C"
+    assert gm == "C"
+    assert gl == "B"
+
+
+def test_grades_bearish_moderate_confidence():
+    from agents.sentiment_analyst import _grades
+    gs, gm, gl = _grades("bearish", 0.70)
+    assert gs == "C"
+    assert gm == "B"
+
+
+def test_grades_watchlist_is_hold():
+    from agents.sentiment_analyst import _grades
+    assert _grades("watchlist", 0.5) == ("B", "B", "B")
+
+
 async def test_run_writes_agent_log(db_session, db_engine):
     from agents.sentiment_analyst import SentimentAnalystAgent
 
