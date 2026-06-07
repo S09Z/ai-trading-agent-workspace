@@ -164,7 +164,8 @@ async def test_fetch_all_skips_failed_source():
         raise RuntimeError("feed down")
 
     with patch("collectors.news.fetch_rss_feed", new=AsyncMock(side_effect=boom)), \
-         patch("collectors.news.fetch_newsapi", new=AsyncMock(return_value=good)):
+         patch("collectors.news.fetch_newsapi", new=AsyncMock(return_value=good)), \
+         patch("collectors.news.fetch_targeted_feeds", new=AsyncMock(return_value=[])):
         results = await fetch_all()
 
     assert len(results) == 1

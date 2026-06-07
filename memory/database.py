@@ -2,9 +2,10 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, Text, text
+from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, Text, text, ForeignKey
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.pool import NullPool
 
 from config.settings import get_settings
 
@@ -63,10 +64,37 @@ class Signal(Base):
     confidence: Mapped[float] = mapped_column(Float)            # 0.0 – 1.0
     source_agent: Mapped[str] = mapped_column(String(50))
     rationale: Mapped[str | None] = mapped_column(Text)
+    grade_short: Mapped[str | None] = mapped_column(String(1))  # S | A | B | C
+    grade_mid: Mapped[str | None] = mapped_column(String(1))
+    grade_long: Mapped[str | None] = mapped_column(String(1))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class SignalOutcome(Base):
+    """Price outcome for a past trading signal — feeds agent memory."""
+
+    __tablename__ = "signal_outcomes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    signal_id: Mapped[int] = mapped_column(Integer, ForeignKey("signals.id"), index=True)
+    ticker: Mapped[str] = mapped_column(String(20), index=True)
+    signal_type: Mapped[str] = mapped_column(String(20))           # bullish | bearish | watchlist
+    source_agent: Mapped[str] = mapped_column(String(50))
+    price_at_signal: Mapped[float | None] = mapped_column(Float)
+    price_1d: Mapped[float | None] = mapped_column(Float)
+    price_5d: Mapped[float | None] = mapped_column(Float)
+    price_30d: Mapped[float | None] = mapped_column(Float)
+    outcome_1d: Mapped[str | None] = mapped_column(String(20))     # correct | incorrect | neutral
+    outcome_5d: Mapped[str | None] = mapped_column(String(20))
+    outcome_30d: Mapped[str | None] = mapped_column(String(20))
+    embedded: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+    evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AgentLog(Base):
@@ -92,8 +120,7 @@ _settings = get_settings()
 engine = create_async_engine(
     _settings.database_url,
     echo=_settings.debug,
-    pool_size=10,
-    max_overflow=20,
+    poolclass=NullPool,
 )
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
@@ -120,3 +147,8 @@ async def init_db() -> None:
         except Exception:
             # Running against plain PostgreSQL (no TimescaleDB) — fine for local dev
             pass
+        # Phase 7 migration — add grade columns to existing signals table
+        for col in ("grade_short", "grade_mid", "grade_long"):
+            await conn.execute(text(
+                f"ALTER TABLE signals ADD COLUMN IF NOT EXISTS {col} VARCHAR(1)"
+            ))

@@ -8,6 +8,24 @@ SIGNAL_THRESHOLD = 0.65  # abs(score) must exceed this to create a Signal
 BATCH_SIZE = 20
 
 
+def _grades(signal_type: str, confidence: float) -> tuple[str, str, str]:
+    """Return (grade_short, grade_mid, grade_long) for a sentiment signal.
+
+    Short-term sentiment impact is strongest; it decays for mid/long horizons.
+    S=Strong Buy, A=Buy, B=Hold, C=Sell.
+    """
+    if signal_type == "bearish":
+        short = "C" if confidence >= 0.80 else "C"
+        mid   = "C" if confidence >= 0.80 else "B"
+        long  = "B"
+        return short, mid, long
+    if signal_type == "bullish":
+        if confidence >= 0.80:
+            return "S", "A", "B"
+        return "A", "B", "B"
+    return "B", "B", "B"  # alert / watchlist
+
+
 class SentimentAnalystAgent(BaseAgent):
     name = "sentiment_analyst"
 
@@ -38,13 +56,18 @@ class SentimentAnalystAgent(BaseAgent):
 
                 if abs(result["score"]) >= SIGNAL_THRESHOLD:
                     signal_type = "bullish" if result["score"] > 0 else "bearish"
+                    conf = round(abs(result["score"]), 4)
+                    gs, gm, gl = _grades(signal_type, conf)
                     for ticker in (art.tickers or []):
                         session.add(Signal(
                             ticker=ticker,
                             signal_type=signal_type,
-                            confidence=round(abs(result["score"]), 4),
+                            confidence=conf,
                             source_agent=self.name,
                             rationale=art.title[:200],
+                            grade_short=gs,
+                            grade_mid=gm,
+                            grade_long=gl,
                         ))
                     await session.commit()
                     signals_created += len(art.tickers or [])
