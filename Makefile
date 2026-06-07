@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker cycle sentiment digest digest-dry test test-cov lint fmt check clean reset deploy ssl-init ssl-renew
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial status test test-cov lint fmt check clean reset deploy ssl-init ssl-renew monitoring
 
 UV      := uv run
 COMPOSE := docker compose
@@ -36,11 +36,23 @@ reset: ## ⚠ Destroy volumes and restart fresh (wipes all data)
 	$(COMPOSE) up -d
 
 # ── App ───────────────────────────────────────────────────────────────────────
+status: ## Show status of all services (frontend optional)
+	@printf "\n\033[1mAlphaOps — Service Status\033[0m\n\n"
+	@printf "  \033[36m%-20s\033[0m" "postgres";      $(COMPOSE) ps --format "{{.Status}}" postgres    2>/dev/null | grep -q "healthy" && printf "\033[32m✓ healthy\033[0m\n" || printf "\033[31m✗ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "qdrant";        $(COMPOSE) ps --format "{{.Status}}" qdrant      2>/dev/null | grep -q "healthy" && printf "\033[32m✓ healthy\033[0m\n" || printf "\033[31m✗ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "redis";         $(COMPOSE) ps --format "{{.Status}}" redis       2>/dev/null | grep -q "healthy" && printf "\033[32m✓ healthy\033[0m\n" || printf "\033[31m✗ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "cockpit :8000"; curl -sf http://localhost:8000/health 2>/dev/null | grep -q '"status"' && printf "\033[32m✓ ok\033[0m\n" || printf "\033[31m✗ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "celery-worker"; pgrep -f "celery.*worker" > /dev/null 2>&1 && printf "\033[32m✓ running\033[0m\n" || printf "\033[31m✗ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "discord-bot";   pgrep -f "discord_bot" > /dev/null 2>&1 && printf "\033[32m✓ running\033[0m\n" || printf "\033[31m✗ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "ollama";        curl -sf http://localhost:11434/api/tags > /dev/null 2>&1 && printf "\033[32m✓ ok\033[0m\n" || printf "\033[33m~ not running\033[0m\n"
+	@printf "  \033[36m%-20s\033[0m" "frontend :3000"; curl -sf --max-time 2 -o /dev/null http://localhost:3000 2>/dev/null && printf "\033[32m✓ running\033[0m\n" || printf "\033[90m- optional\033[0m\n"
+	@echo ""
+
 start: ## Run startup health check (DB + Qdrant + LLM)
 	$(UV) python main.py
 
 cockpit: ## Start Agent Cockpit API server (port 8000)
-	$(UV) uvicorn cockpit.app:app --reload --port 8000
+	-lsof -ti:8000 | xargs kill -9 2>/dev/null; $(UV) uvicorn cockpit.app:app --reload --port 8000
 
 frontend: ## Start Next.js frontend dev server (port 3000)
 	-lsof -ti:3000 | xargs kill -9 2>/dev/null; cd frontend && pnpm dev
@@ -51,9 +63,35 @@ discord-bot: ## Start Discord bot (listens for !commands)
 celery-worker: ## Start Celery worker (processes queued tasks)
 	PYTHONPATH=. $(UV) celery -A scheduler.tasks:celery_app worker --loglevel=info
 
+celery-beat: ## Start Celery Beat scheduler (enqueues tasks on schedule)
+	PYTHONPATH=. $(UV) celery -A scheduler.tasks:celery_app beat --loglevel=info
+
+# ── PM2 ───────────────────────────────────────────────────────────────────────
+pm2-start: ## Start all background services via PM2 (cockpit + workers + discord-bot)
+	@mkdir -p logs/pm2
+	-lsof -ti:8000 | xargs kill -9 2>/dev/null; pm2 start ecosystem.config.js
+
+pm2-stop: ## Stop all PM2-managed services
+	pm2 stop ecosystem.config.js
+
+pm2-restart: ## Restart all PM2-managed services
+	pm2 restart ecosystem.config.js
+
+pm2-status: ## Show PM2 process list
+	pm2 list
+
+pm2-logs: ## Follow logs for all PM2 processes (Ctrl+C to stop)
+	pm2 logs
+
 # ── Agents ────────────────────────────────────────────────────────────────────
 cycle: ## Run full agent cycle (NewsHunter → MarketWatch → Sentiment → Risk → Research)
 	$(UV) python -m scripts.run_cycle
+
+memory: ## Run MemoryAgent — evaluate past signal outcomes and embed into Qdrant
+	$(UV) python -c "import asyncio; from agents.memory_agent import MemoryAgent; asyncio.run(MemoryAgent().run())"
+
+financial: ## Run FinancialAnalystAgent — analyze financials for all watchlist tickers
+	$(UV) python -c "import asyncio; from agents.financial_analyst import FinancialAnalystAgent; asyncio.run(FinancialAnalystAgent().run())"
 
 sentiment: ## Run SentimentAnalyst on unanalysed articles
 	$(UV) python -c "import asyncio; from agents.sentiment_analyst import SentimentAnalystAgent; asyncio.run(SentimentAnalystAgent().run())"
@@ -102,6 +140,10 @@ ssl-init: ## Obtain Let's Encrypt cert (requires APP_ENV=production and DOMAIN= 
 
 ssl-renew: ## Renew SSL certificates and reload nginx
 	docker compose -f docker-compose.prod.yml run --rm certbot renew --quiet
+
+monitoring: ## Open Prometheus UI (prod — port-forwards 9090)
+	docker compose -f docker-compose.prod.yml exec prometheus wget -qO- http://localhost:9090/-/ready && \
+		echo "Prometheus ready — visit http://localhost:9090" || echo "Start prod stack first: make deploy"
 	docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────

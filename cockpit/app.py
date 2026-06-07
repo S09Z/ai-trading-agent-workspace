@@ -3,9 +3,10 @@
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 
-from cockpit.routers import agents, logs, signals
+from cockpit.routers import agents, logs, outcomes, signals
 from config.settings import get_settings
 from memory.database import AsyncSessionLocal
 
@@ -21,6 +22,9 @@ app.add_middleware(
 app.include_router(agents.router, prefix="/agents", tags=["agents"])
 app.include_router(signals.router, prefix="/signals", tags=["signals"])
 app.include_router(logs.router, prefix="/logs", tags=["logs"])
+app.include_router(outcomes.router, prefix="/outcomes", tags=["outcomes"])
+
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 
 @app.get("/health")

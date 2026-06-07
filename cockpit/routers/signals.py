@@ -36,6 +36,9 @@ async def list_signals(
             confidence=r.confidence,
             source_agent=r.source_agent,
             rationale=r.rationale,
+            grade_short=r.grade_short,
+            grade_mid=r.grade_mid,
+            grade_long=r.grade_long,
             created_at=r.created_at,
         )
         for r in rows

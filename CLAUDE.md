@@ -132,8 +132,20 @@ USE_LOCAL_LLM=false  # use Claude API (default)
 - [x] `make deploy` — pulls latest, rebuilds, restarts prod containers
 - [x] `GET /health` — now checks DB + Qdrant connectivity, returns `{"status": "ok|degraded", "db": "ok|error", "qdrant": "ok|error"}`
 
-### Phase 6 — Next
+### Phase 6 — In Progress
 
 - [ ] SSL — run certbot on VPS, uncomment SSL server block in `nginx/nginx.conf`
-- [ ] Monitoring — Prometheus `/metrics` or uptime ping on `GET /health`
-- [ ] Log shipping — forward container logs to a central sink (Loki, Datadog, etc.)
+- [x] Virtual Office 3D — Three.js isometric office, Lego minifigure agents, iframe in Next.js, WS bridge (`frontend/public/virtual-office/`)
+- [x] Monitoring — `prometheus-fastapi-instrumentator` on cockpit → `GET /metrics`; Prometheus service in `docker-compose.prod.yml` (`monitoring/prometheus.yml`); `make monitoring`
+- [x] Log shipping — Docker `json-file` log rotation (10 MB × 5 files) on all prod services via YAML anchor `x-logging`
+
+### Phase 7 — Agent Memory / Learning ✅
+
+- [x] `SignalOutcome` model (`memory/database.py`) — tracks price at signal + 1d/5d/30d, outcome label (correct/incorrect/neutral)
+- [x] `agents/memory_agent.py` — evaluates past bullish/bearish signals via yfinance, stores outcomes, embeds into Qdrant
+- [x] Memory-augmented RAG — `ResearchAnalystAgent` queries past outcomes for a ticker before writing thesis
+- [x] `GET /outcomes` — recent signal outcomes (filterable by ticker)
+- [x] `GET /outcomes/accuracy` — per-agent accuracy stats (correct %, total evaluated)
+- [x] Celery Beat — `run_memory_agent` task added (daily), evaluates up to 50 signals per run
+- [x] `make memory` — run MemoryAgent manually
+- [x] 8 tests in `tests/test_memory_agent.py`, 163 total passing
