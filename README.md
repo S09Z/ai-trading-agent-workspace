@@ -7,11 +7,13 @@ An AI-native multi-agent trading intelligence platform. Continuously collects, a
 | Agent | Responsibility | Schedule |
 | --- | --- | --- |
 | **Orchestrator** | Coordinates all agents, routes tasks in layers | Always-on |
-| **NewsHunter** | Scrapes financial news, deduplicates, embeds into RAG | Every 5 min |
-| **MarketWatch** | Monitors OHLCV price data, detects volume spikes | Every 1 min |
-| **SentimentAnalyst** | Classifies article sentiment via LLM, creates signals | On new data |
-| **ResearchAnalyst** | Deep-dives on hottest ticker using RAG context | On demand |
-| **RiskMonitor** | Tracks price spikes, circuit breaker, market alerts | Every 15 min |
+| **NewsHunter** | Scrapes 8 RSS feeds + targeted small-cap feeds, deduplicates, embeds into RAG | Every 5 min |
+| **MarketWatch** | Monitors OHLCV price data, detects ≥3% moves | Every 1 min |
+| **SentimentAnalyst** | Classifies article sentiment via LLM → Signal + S/A/B/C grade | On new data |
+| **ResearchAnalyst** | RAG + past outcome memory deep-dive on hot ticker → Signal + grades | Hourly |
+| **RiskMonitor** | Aggregates price spikes, fires circuit breaker at >3 spikes / 15 min | Every 15 min |
+| **MemoryAgent** | Evaluates past signal accuracy via yfinance, embeds outcomes into Qdrant | Daily |
+| **FinancialAnalyst** | Fetches 17 financial metrics via yfinance, LLM assessment → Signal + grades | Daily |
 
 Results are pushed to Discord as a rich market digest every 6 hours, enriched with the Agent Intelligence section (signals, research thesis, risk status).
 
@@ -118,12 +120,30 @@ Copy `.env.example` to `.env` and set the following:
 | Command | Description |
 | --- | --- |
 | `make start` | Startup health check (DB + Qdrant + LLM) |
+| `make status` | Color-coded health check for all 8 services |
 | `make cockpit` | Start Agent Cockpit API server (port 8000, hot-reload) |
 | `make frontend` | Start Next.js dashboard (port 3000) |
+| `make discord-bot` | Start Discord bot (listens for `!` commands) |
+| `make celery-worker` | Start Celery worker (processes queued tasks) |
+| `make celery-beat` | Start Celery Beat scheduler (enqueues tasks on schedule) |
 | `make cycle` | Full agent cycle: NewsHunter → MarketWatch → SentimentAnalyst → RiskMonitor → ResearchAnalyst |
 | `make sentiment` | Run SentimentAnalyst only (use after NewsHunter has collected articles) |
+| `make financial` | Run FinancialAnalystAgent (all watchlist tickers) |
+| `make memory` | Run MemoryAgent (evaluate past signal outcomes) |
 | `make digest` | Generate market digest and post to Discord |
 | `make digest-dry` | Preview digest without posting to Discord |
+
+### PM2 (background process management)
+
+> Requires `npm install -g pm2` once.
+
+| Command | Description |
+| --- | --- |
+| `make pm2-start` | Start cockpit + celery-worker + celery-beat + discord-bot as background processes |
+| `make pm2-stop` | Stop all PM2-managed services |
+| `make pm2-restart` | Restart all PM2-managed services |
+| `make pm2-status` | Show PM2 process list with CPU/memory |
+| `make pm2-logs` | Follow logs for all PM2 processes |
 
 ### Code quality
 
@@ -146,11 +166,13 @@ make cockpit   # → http://localhost:8000
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /health` | Service health check |
+| `GET /health` | Service health check (DB + Qdrant) |
 | `GET /agents` | All agents with latest status (last action, last seen, level) |
 | `GET /agents/{name}/logs` | Recent logs for a specific agent |
-| `GET /signals?hours=6` | Recent trading signals ordered by confidence |
+| `GET /signals?hours=6` | Recent trading signals ordered by confidence (includes S/A/B/C grades) |
 | `GET /logs?hours=1` | Activity log across all agents |
+| `GET /outcomes?ticker=` | Recent signal outcomes (price at signal vs actual) |
+| `GET /outcomes/accuracy` | Per-agent accuracy stats (correct %, total evaluated) |
 | `WS /logs/ws` | Real-time stream — pushes new `AgentLog` rows every 2s |
 
 Interactive API docs: <http://localhost:8000/docs>
@@ -160,41 +182,51 @@ Interactive API docs: <http://localhost:8000/docs>
 ```text
 .
 ├── agents/              # Agent implementations
-│   ├── base.py          # BaseAgent with logging helper
-│   ├── orchestrator.py  # Coordinates agents in three layers
-│   ├── news_hunter.py   # RSS + NewsAPI scraper with Qdrant embedding
-│   ├── market_watch.py  # OHLCV polling + spike detection
-│   ├── sentiment_analyst.py  # LLM sentiment classification → Signal
-│   ├── research_analyst.py   # RAG-powered ticker deep-dive → Signal
-│   └── risk_monitor.py  # Circuit breaker + spike aggregation → Signal
+│   ├── base.py               # BaseAgent with logging helper
+│   ├── orchestrator.py       # Coordinates agents in three layers
+│   ├── news_hunter.py        # RSS + NewsAPI + targeted feeds scraper with Qdrant embedding
+│   ├── market_watch.py       # OHLCV polling + ≥3% spike detection
+│   ├── sentiment_analyst.py  # LLM sentiment classification → Signal + S/A/B/C grades
+│   ├── research_analyst.py   # RAG + memory deep-dive → Signal + grades
+│   ├── risk_monitor.py       # Spike aggregation, circuit breaker
+│   ├── memory_agent.py       # Past signal outcome evaluation + Qdrant embedding
+│   └── financial_analyst.py  # 17 yfinance metrics → LLM → Signal + grades (daily)
 ├── cockpit/             # Agent Cockpit FastAPI backend
 │   ├── app.py           # FastAPI app + CORS
-│   ├── schemas.py       # Pydantic response models
-│   └── routers/         # agents · signals · logs (REST + WebSocket)
-├── frontend/            # Next.js 16 dashboard (Market Dashboard + Virtual Office)
-│   ├── app/page.tsx     # Market Dashboard — signals, agent status, activity log
-│   ├── app/office/      # Virtual Office — pixel-art Canvas room
-│   ├── components/      # SignalCard · AgentStatusBadge · ActivityLog · VirtualOffice
+│   ├── schemas.py       # Pydantic response models (includes grade fields + SignalOutcome)
+│   └── routers/         # agents · signals · logs · outcomes (REST + WebSocket)
+├── frontend/            # Next.js 16 dashboard (Market Dashboard + Virtual Office 3D)
+│   ├── app/page.tsx     # Market Dashboard — signal cards with grade badges, agent status
+│   ├── app/office/      # Virtual Office — Three.js 3D isometric office (iframe)
+│   ├── components/      # SignalCard (with S/A/B/C grade row) · AgentStatusBadge · ActivityLog
+│   ├── public/virtual-office/  # Three.js scene, Lego agents, WS bridge
 │   └── lib/             # API client + TypeScript types
 ├── intelligence/
-│   ├── claude_client.py # Anthropic SDK wrapper
-│   ├── local_client.py  # Ollama wrapper (local LLM)
-│   ├── sentiment.py     # Sentiment analysis via LLM
-│   ├── summarizer.py    # Market digest generation + signal/risk enrichment
-│   └── discord_notifier.py  # Discord webhook embed + Agent Intelligence section
+│   ├── claude_client.py      # Anthropic SDK wrapper
+│   ├── local_client.py       # Ollama wrapper (local LLM)
+│   ├── sentiment.py          # Sentiment analysis via LLM
+│   ├── summarizer.py         # Market digest generation + signal/risk enrichment
+│   └── discord_notifier.py   # Discord webhook embed + Agent Intelligence section
 ├── memory/
-│   ├── database.py      # SQLAlchemy models: Article, Signal, AgentLog, MarketSnapshot
+│   ├── database.py      # SQLAlchemy models: Article, Signal (+grades), AgentLog, MarketSnapshot, SignalOutcome
 │   ├── vector_store.py  # Qdrant RAG (upsert, search)
 │   └── cache.py         # Redis cache helpers
-├── scheduler/           # Celery task definitions
+├── config/
+│   ├── settings.py      # Pydantic settings — single source of truth (watchlist: 35 tickers)
+│   └── universe.py      # 199-ticker stock universe (21 sectors) for DiscoveryAgent
+├── collectors/
+│   ├── news.py          # RSS + NewsAPI + TARGETED_FEEDS (OKLO/SMR/TMDX) with macro aliases
+│   └── market_data.py   # yfinance OHLCV fetcher
+├── scheduler/
+│   └── tasks.py         # Celery tasks (news/market/sentiment/risk/research/digest/memory/financial)
 ├── scripts/
 │   ├── news_digest.py   # CLI: generate + post Discord digest
 │   └── run_cycle.py     # CLI: run full agent cycle
-├── config/
-│   └── settings.py      # Pydantic settings — single source of truth
-├── tests/               # 137 tests (pytest-asyncio)
+├── tests/               # 184 tests (pytest-asyncio)
 ├── docker-compose.yml   # PostgreSQL/TimescaleDB · Qdrant · Redis
-├── Makefile             # Dev commands
+├── docker-compose.prod.yml  # All 8 production services + Nginx + Prometheus
+├── ecosystem.config.js  # PM2 process config (cockpit, workers, discord-bot)
+├── Makefile             # Dev commands (make status / financial / celery-beat / pm2-*)
 ├── main.py              # Startup health check
 └── pyproject.toml       # Dependencies + Poe tasks + tool config
 ```
@@ -208,7 +240,9 @@ Interactive API docs: <http://localhost:8000/docs>
 | 3 | ✅ Done | SentimentAnalyst, ResearchAnalyst, RiskMonitor, RAG pipeline, Discord digest upgrade |
 | 4A | ✅ Done | Cockpit backend — FastAPI REST + WebSocket (`make cockpit`) |
 | 4B | ✅ Done | Cockpit frontend — Next.js Market Dashboard + Virtual Office pixel-art (`make frontend`) |
-| 5 | ✅ Done | VPS deployment — Nginx, Celery Beat, production Docker Compose, SSL via Let's Encrypt |
-| 6 | 🔜 Planned | Dashboard UI — candlestick charts, signal history table, agent performance metrics, mobile layout |
-| 7 | 🔜 Planned | Watchlist & strategy — configurable ticker watchlist, backtesting engine, signal confluence scoring, earnings calendar, model routing (haiku vs sonnet), structured LLM output |
-| 8 | 🔜 Planned | Live execution — Alpaca paper/live trading, TradeExecutor agent, position management (stop-loss/take-profit), P&L dashboard (Sharpe/drawdown/win rate), Discord `!halt` kill switch, RiskMonitor execution gate |
+| 5 | ✅ Done | VPS deployment — Nginx, Celery Beat, production Docker Compose, `make deploy` |
+| 6 | ✅ Done* | Virtual Office 3D (Three.js), Prometheus monitoring, log rotation — *SSL pending VPS setup |
+| 7 | ✅ Done | Signal memory — `SignalOutcome`, MemoryAgent, memory-augmented RAG, `GET /outcomes`, `GET /outcomes/accuracy` |
+| 8 | 🔄 In Progress | Intelligence expansion — S/A/B/C signal grades (Short/Mid/Long), FinancialAnalystAgent (17 metrics), expanded watchlist (35 tickers + macro), targeted feeds for small-caps, stock universe (`config/universe.py`, 199 tickers), PM2 process management |
+| 9 | 🔜 Planned | DiscoveryAgent — surface strong-buy stocks outside watchlist using `config/universe.py` |
+| 10 | 🔜 Planned | Live execution — Alpaca paper/live trading, TradeExecutor, position management, P&L dashboard |
