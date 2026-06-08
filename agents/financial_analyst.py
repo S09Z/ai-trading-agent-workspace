@@ -122,12 +122,8 @@ class FinancialAnalystAgent(BaseAgent):
                 "Grades: S=Strong Buy, A=Buy, B=Hold, C=Sell"
             )
 
-            if _settings.use_local_llm:
-                from intelligence.local_client import chat_local
-                response = await chat_local(prompt, system=_SYSTEM, max_tokens=200)
-            else:
-                from intelligence.claude_client import analyze
-                response = await analyze(prompt, max_tokens=200)
+            from intelligence.llm import analyze
+            response = await analyze(prompt, system=_SYSTEM, max_tokens=200)
 
             signal_type, confidence, gs, gm, gl, rationale = _parse_response(response)
 

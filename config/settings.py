@@ -45,7 +45,7 @@ class Settings(BaseSettings):
         return self.redis_url
 
     # ── Claude / Anthropic ─────────────────────────────────────────────────────
-    anthropic_api_key: str
+    anthropic_api_key: str = ""
     claude_model: str = "claude-sonnet-4-6"
 
     # ── NewsAPI ────────────────────────────────────────────────────────────────
@@ -70,6 +70,11 @@ class Settings(BaseSettings):
     use_local_llm: bool = False           # set True to use Ollama instead of Claude
     local_model: str = "qwen3:latest"     # any model pulled via `ollama pull`
     ollama_url: str = "http://localhost:11434"
+
+    # ── Groq (free cloud inference) ───────────────────────────────────────────
+    use_groq: bool = False                # set True to use Groq instead of Claude
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # ── Discord ────────────────────────────────────────────────────────────────
     discord_bot_token: str = ""

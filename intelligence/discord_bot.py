@@ -47,6 +47,8 @@ def _queue(task, **kwargs) -> None:
 @bot.event
 async def on_command_error(ctx: commands.Context, error: Exception) -> None:
     """Reply with a user-friendly message on command failure."""
+    if isinstance(error, (commands.CommandNotFound, commands.CheckFailure)):
+        return
     cause = getattr(error, "original", error)
     if isinstance(cause, RuntimeError):
         await ctx.reply(
@@ -55,7 +57,7 @@ async def on_command_error(ctx: commands.Context, error: Exception) -> None:
         )
     else:
         _log.exception("Unhandled command error in %s", ctx.command)
-        await ctx.reply(f"Error: {cause}")
+        await ctx.reply(f"Unexpected error: {cause}")
 
 
 @bot.command(name="cycle")
@@ -119,7 +121,6 @@ async def cmd_help(ctx: commands.Context) -> None:
 
 def main() -> None:
     """Configure logging and start the Discord bot (blocking)."""
-    import logging
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",

@@ -14,6 +14,7 @@ An AI-native multi-agent trading intelligence platform. Continuously collects, a
 | **RiskMonitor** | Aggregates price spikes, fires circuit breaker at >3 spikes / 15 min | Every 15 min |
 | **MemoryAgent** | Evaluates past signal accuracy via yfinance, embeds outcomes into Qdrant | Daily |
 | **FinancialAnalyst** | Fetches 17 financial metrics via yfinance, LLM assessment → Signal + grades | Daily |
+| **DiscoveryAgent** | Scans 199-ticker universe for news mention spikes outside watchlist → Signal + grades | Every 6h |
 
 Results are pushed to Discord as a rich market digest every 6 hours, enriched with the Agent Intelligence section (signals, research thesis, risk status).
 
@@ -130,6 +131,7 @@ Copy `.env.example` to `.env` and set the following:
 | `make sentiment` | Run SentimentAnalyst only (use after NewsHunter has collected articles) |
 | `make financial` | Run FinancialAnalystAgent (all watchlist tickers) |
 | `make memory` | Run MemoryAgent (evaluate past signal outcomes) |
+| `make discover` | Run DiscoveryAgent (surface universe tickers with strong news mentions) |
 | `make digest` | Generate market digest and post to Discord |
 | `make digest-dry` | Preview digest without posting to Discord |
 
@@ -190,7 +192,8 @@ Interactive API docs: <http://localhost:8000/docs>
 │   ├── research_analyst.py   # RAG + memory deep-dive → Signal + grades
 │   ├── risk_monitor.py       # Spike aggregation, circuit breaker
 │   ├── memory_agent.py       # Past signal outcome evaluation + Qdrant embedding
-│   └── financial_analyst.py  # 17 yfinance metrics → LLM → Signal + grades (daily)
+│   ├── financial_analyst.py  # 17 yfinance metrics → LLM → Signal + grades (daily)
+│   └── discovery_agent.py    # Universe ticker mention scan → Signal + grades (every 6h)
 ├── cockpit/             # Agent Cockpit FastAPI backend
 │   ├── app.py           # FastAPI app + CORS
 │   ├── schemas.py       # Pydantic response models (includes grade fields + SignalOutcome)
@@ -222,7 +225,7 @@ Interactive API docs: <http://localhost:8000/docs>
 ├── scripts/
 │   ├── news_digest.py   # CLI: generate + post Discord digest
 │   └── run_cycle.py     # CLI: run full agent cycle
-├── tests/               # 184 tests (pytest-asyncio)
+├── tests/               # 197 tests (pytest-asyncio)
 ├── docker-compose.yml   # PostgreSQL/TimescaleDB · Qdrant · Redis
 ├── docker-compose.prod.yml  # All 8 production services + Nginx + Prometheus
 ├── ecosystem.config.js  # PM2 process config (cockpit, workers, discord-bot)
@@ -244,5 +247,5 @@ Interactive API docs: <http://localhost:8000/docs>
 | 6 | ✅ Done* | Virtual Office 3D (Three.js), Prometheus monitoring, log rotation — *SSL pending VPS setup |
 | 7 | ✅ Done | Signal memory — `SignalOutcome`, MemoryAgent, memory-augmented RAG, `GET /outcomes`, `GET /outcomes/accuracy` |
 | 8 | 🔄 In Progress | Intelligence expansion — S/A/B/C signal grades (Short/Mid/Long), FinancialAnalystAgent (17 metrics), expanded watchlist (35 tickers + macro), targeted feeds for small-caps, stock universe (`config/universe.py`, 199 tickers), PM2 process management |
-| 9 | 🔜 Planned | DiscoveryAgent — surface strong-buy stocks outside watchlist using `config/universe.py` |
+| 9 | ✅ Done | DiscoveryAgent — news mention scan across 199-ticker universe, `make discover`, Celery every 6h |
 | 10 | 🔜 Planned | Live execution — Alpaca paper/live trading, TradeExecutor, position management, P&L dashboard |
