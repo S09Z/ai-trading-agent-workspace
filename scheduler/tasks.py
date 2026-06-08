@@ -66,6 +66,14 @@ def run_financial_analyst(ticker: str | None = None) -> None:
     asyncio.run(FinancialAnalystAgent().run(ticker=ticker))
 
 
+# ── Discovery tasks ────────────────────────────────────────────────────────────
+
+@celery_app.task(name="scheduler.tasks.run_discovery_agent")
+def run_discovery_agent() -> None:
+    from agents.discovery_agent import DiscoveryAgent
+    asyncio.run(DiscoveryAgent().run())
+
+
 # ── Phase 7 tasks ──────────────────────────────────────────────────────────────
 
 @celery_app.task(name="scheduler.tasks.run_memory_agent")
@@ -80,9 +88,12 @@ def run_digest() -> None:
     from intelligence.summarizer import build_digest
 
     async def _run() -> None:
+        from intelligence.discord_notifier import send_message
         digest, count, signals, risk = await build_digest(hours=6)
         if count > 0:
             await send_digest_embed(digest, article_count=count, hours=6, signals=signals, risk=risk)
+        else:
+            await send_message("📭 No articles in the last 6h — run `!cycle` to fetch fresh news.")
 
     asyncio.run(_run())
 
@@ -125,5 +136,10 @@ celery_app.conf.beat_schedule = {
     "financial-analyst": {
         "task": "scheduler.tasks.run_financial_analyst",
         "schedule": 86400.0,                                  # daily (financials update quarterly)
+    },
+    # Discovery
+    "discovery-agent": {
+        "task": "scheduler.tasks.run_discovery_agent",
+        "schedule": 21600.0,                                  # every 6 hours (aligned with digest)
     },
 }

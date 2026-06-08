@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial status test test-cov lint fmt check clean reset deploy ssl-init ssl-renew monitoring
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial discover status test test-cov lint fmt check clean reset deploy deploy-ci ssl-init ssl-renew monitoring
 
 UV      := uv run
 COMPOSE := docker compose
@@ -93,6 +93,9 @@ memory: ## Run MemoryAgent — evaluate past signal outcomes and embed into Qdra
 financial: ## Run FinancialAnalystAgent — analyze financials for all watchlist tickers
 	$(UV) python -c "import asyncio; from agents.financial_analyst import FinancialAnalystAgent; asyncio.run(FinancialAnalystAgent().run())"
 
+discover: ## Run DiscoveryAgent — find universe tickers with strong news mentions outside watchlist
+	$(UV) python -c "import asyncio; from agents.discovery_agent import DiscoveryAgent; asyncio.run(DiscoveryAgent().run())"
+
 sentiment: ## Run SentimentAnalyst on unanalysed articles
 	$(UV) python -c "import asyncio; from agents.sentiment_analyst import SentimentAnalystAgent; asyncio.run(SentimentAnalystAgent().run())"
 
@@ -122,6 +125,10 @@ check: ## Run lint + full test suite
 # ── Production ────────────────────────────────────────────────────────────────
 deploy: ## Pull latest, rebuild, and restart all production containers
 	git pull
+	docker compose -f docker-compose.prod.yml build --pull
+	docker compose -f docker-compose.prod.yml up -d
+
+deploy-ci: ## Same as deploy but skips git pull (used by GitHub Actions after checkout)
 	docker compose -f docker-compose.prod.yml build --pull
 	docker compose -f docker-compose.prod.yml up -d
 

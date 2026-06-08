@@ -39,18 +39,7 @@ async def analyze_sentiment(title: str, content: str = "") -> dict:
     body = content[:500] if content else ""
     prompt = f"Title: {title}\n\nContent: {body or '(none)'}"
 
-    if _settings.use_local_llm:
-        from intelligence.local_client import chat_local
-
-        raw = await chat_local(prompt, system=_SYSTEM, max_tokens=60)
-    else:
-        from intelligence.claude_client import chat
-
-        response = await chat(
-            messages=[{"role": "user", "content": prompt}],
-            system=_SYSTEM,
-            max_tokens=60,
-        )
-        raw = response.content[0].text
+    from intelligence.llm import analyze
+    raw = await analyze(prompt, system=_SYSTEM, max_tokens=60)
 
     return _parse(raw)

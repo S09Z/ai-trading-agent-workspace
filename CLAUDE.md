@@ -149,3 +149,13 @@ USE_LOCAL_LLM=false  # use Claude API (default)
 - [x] Celery Beat — `run_memory_agent` task added (daily), evaluates up to 50 signals per run
 - [x] `make memory` — run MemoryAgent manually
 - [x] 8 tests in `tests/test_memory_agent.py`, 163 total passing
+
+### Phase 9 — DiscoveryAgent ✅
+
+- [x] `agents/discovery_agent.py` — scans last 24h articles for universe ticker mentions outside watchlist
+- [x] `config/universe.py` (199 tickers, 21 sectors) — `_UNIVERSE` frozenset for O(1) lookups
+- [x] Filter: ≥2 article mentions, not in watchlist, not discovered in last 24h
+- [x] Top 5 candidates: yfinance price snapshot → LLM signal assessment (bullish/bearish/watchlist + S/A/B/C grades)
+- [x] Celery Beat — `run_discovery_agent` task added (every 6h, aligned with digest)
+- [x] `make discover` — run DiscoveryAgent manually
+- [x] 13 tests in `tests/test_discovery_agent.py`, 197 total passing

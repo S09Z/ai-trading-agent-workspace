@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 
 from config.settings import get_settings
-from intelligence.claude_client import chat
 from memory.database import AgentLog, Article, AsyncSessionLocal, Signal
 
 _settings = get_settings()
@@ -138,17 +137,8 @@ async def generate_digest(
             + (" — CIRCUIT OPEN" if risk.get("circuit_open") else "")
         )
 
-    if _settings.use_local_llm:
-        from intelligence.local_client import chat_local
-
-        return await chat_local(prompt, system=_SYSTEM, max_tokens=600)
-
-    response = await chat(
-        messages=[{"role": "user", "content": prompt}],
-        system=_SYSTEM,
-        max_tokens=600,
-    )
-    return response.content[0].text
+    from intelligence.llm import analyze
+    return await analyze(prompt, system=_SYSTEM, max_tokens=600)
 
 
 async def build_digest(hours: int = 6) -> tuple[str, int, list[dict], dict]:

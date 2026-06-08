@@ -85,6 +85,61 @@ make deploy
 
 ---
 
+## Oracle Cloud (OCI) Free Tier Setup
+
+**Recommended shape:** VM.Standard.A1.Flex — 4 OCPU / 24 GB RAM (always free). ARM architecture; Docker pulls ARM variants automatically.
+
+### One-time instance setup (SSH in manually)
+
+```bash
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin git make
+sudo usermod -aG docker ubuntu && newgrp docker
+
+# Clone repo
+git clone https://github.com/<your-org>/ai-trading-agent-workspace.git
+cd ai-trading-agent-workspace
+
+# Fill in secrets
+cp .env.prod.example .env.prod
+nano .env.prod   # set DOMAIN, POSTGRES_PASSWORD, ANTHROPIC_API_KEY, etc.
+
+make deploy
+```
+
+**OCI Security List** — open inbound TCP ports in VCN → Subnet → Security List:
+
+- 22 (SSH), 80 (HTTP), 443 (HTTPS)
+
+**SSL note:** Let's Encrypt (`make ssl-init`) requires a real domain name — it won't issue certs for bare IPs. Use `APP_ENV=development` (HTTP) if you don't have a domain yet.
+
+---
+
+## GitHub Actions — Automated Deploy
+
+Push to `main` triggers `.github/workflows/deploy.yml`, which SSH-deploys to the OCI instance.
+
+### Required GitHub Secrets
+
+Add under repo **Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+|---|---|
+| `OCI_HOST` | OCI instance public IP |
+| `OCI_USER` | `ubuntu` (OCI default for Ubuntu images) |
+| `OCI_SSH_KEY` | Private SSH key (matching the public key in `~/.ssh/authorized_keys` on the instance) |
+
+### Manual trigger
+
+The workflow supports `workflow_dispatch` — you can also trigger it from the Actions tab without pushing.
+
+### Local equivalent
+
+```bash
+make deploy-ci   # same as deploy but skips git pull (GitHub Actions already checked out the code)
+```
+
+---
+
 ## VPS Resource Requirements
 Minimum VPS: 2 vCPU / 4 GB RAM / 40 GB SSD
 แนะนำ: 4 vCPU / 8 GB RAM / 80 GB SSD (รองรับ corpus growth 12 เดือน)

@@ -60,14 +60,8 @@ class ResearchAnalystAgent(BaseAgent):
             "LONG: <grade>"
         )
 
-        if _settings.use_local_llm:
-            from intelligence.local_client import chat_local
-
-            analysis = await chat_local(prompt, system=_SYSTEM, max_tokens=200)
-        else:
-            from intelligence.claude_client import analyze
-
-            analysis = await analyze(prompt, max_tokens=200)
+        from intelligence.llm import analyze
+        analysis = await analyze(prompt, system=_SYSTEM, max_tokens=200)
 
         gs, gm, gl = _parse_grades(analysis)
 
