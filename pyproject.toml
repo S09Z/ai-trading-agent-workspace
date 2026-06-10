@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "prometheus-fastapi-instrumentator>=7.0",
     # data collection
+    "scipy>=1.13",
     "yfinance>=0.2",
     "newsapi-python>=0.2",
     "feedparser>=6.0",

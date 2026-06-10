@@ -97,6 +97,22 @@ class SignalOutcome(Base):
     evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class FactorScore(Base):
+    """IC/IR score for one alpha factor on one ticker — refreshed weekly."""
+
+    __tablename__ = "factor_scores"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String(20), index=True)
+    name: Mapped[str] = mapped_column(String(50))       # "ret_3m", "realized_vol_20d", ...
+    bucket: Mapped[str] = mapped_column(String(20))     # momentum | value | quality | liquidity | volatility
+    ic: Mapped[float] = mapped_column(Float)            # Spearman IC vs 5d forward return
+    status: Mapped[str] = mapped_column(String(10))     # alive | reversed | dead
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
 class AgentLog(Base):
     """Append-only activity log for all agents — feeds the virtual office UI."""
 
