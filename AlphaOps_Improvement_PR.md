@@ -844,3 +844,731 @@ Sprint 3 (Refactor + extend):
 
 *Document compiled from analysis of: OpenAlice (TraderAlice), Vibe-Trading (HKUDS), Machine Learning for Trading (Stefan Jansen 2nd Ed.)*  
 *Generated: June 2026*
+
+---
+
+## Phase 8 — Step-by-Step Implementation Guide
+
+> ลำดับ build: **PR #5 → PR #6 → PR #7 → PR #3**  
+> แต่ละ step มี: สิ่งที่เปลี่ยน + Before vs After impact
+
+---
+
+### PR #5 — Alpha Zoo (8 steps)
+
+---
+
+#### Step 1 — Add `scipy` dependency
+
+**File:** `pyproject.toml`  
+**Change:** Add `scipy>=1.13` to `dependencies`.
+
+> ไม่ต้องใช้ `qlib` (หนักเกินไป) — `scipy` + `pandas` + `yfinance` ครอบคลุมทุก factor ที่ต้องการ
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Factor math | ไม่มี | Spearman rank correlation สำหรับ IC calculation |
+| Dependency | ไม่มี scipy | `scipy>=1.13` พร้อมใช้ |
+
+---
+
+#### Step 2 — Create `agents/factor_library.py`
+
+**File:** `agents/factor_library.py` *(ไฟล์ใหม่)*  
+**Change:** Module ที่คำนวณ 5 alpha factor buckets (momentum, value, quality, liquidity, volatility) สำหรับแต่ละ ticker จากนั้น score แต่ละ factor ด้วย IC (Information Coefficient) และ IR (Information Ratio) แล้ว classify เป็น `alive / reversed / dead`
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| FinancialAnalyst data | 17 static yfinance `.info` keys — ไม่มี predictive scoring | IC/IR-scored factors — ส่งเฉพาะ alive factors ต่อ |
+| Signal basis | LLM อ่านตัวเลขดิบโดยไม่รู้ว่า metric ไหน predict ได้จริง | LLM เห็น "momentum IC=0.42 (alive), value IC=0.31 (alive)" |
+| Factor quality | ไม่ทราบ — ใช้ metrics เดิมทุกครั้งไม่ว่าตลาดจะเป็นแบบไหน | Self-calibrating — dead factors หลุดออกอัตโนมัติ |
+
+```python
+# agents/factor_library.py
+import asyncio
+from datetime import UTC, datetime
+import pandas as pd
+from scipy.stats import spearmanr
+import yfinance as yf
+
+ALPHA_BUCKETS = {
+    "momentum":   ["ret_1m", "ret_3m", "ret_6m", "ret_12m"],
+    "value":      ["pe_ratio_z", "pb_ratio_z", "ps_ratio_z"],
+    "quality":    ["roe", "roa", "gross_margin", "asset_turnover"],
+    "liquidity":  ["turnover_ratio"],
+    "volatility": ["realized_vol_20d", "realized_vol_60d"],
+}
+
+def compute_ic(factor_series: pd.Series, forward_return: pd.Series) -> float:
+    corr, _ = spearmanr(factor_series.dropna(), forward_return.dropna())
+    return float(corr) if not pd.isna(corr) else 0.0
+
+def classify_factor(ic: float) -> str:
+    if abs(ic) < 0.05:
+        return "dead"
+    return "alive" if ic > 0 else "reversed"
+
+def compute_factor_ic(ticker: str, factor_name: str, prices: pd.DataFrame) -> float:
+    fwd_return = prices["close"].pct_change(5).shift(-5)
+    if factor_name.startswith("ret_"):
+        days = int(factor_name.split("_")[1].replace("m", "")) * 21
+        factor = prices["close"].pct_change(days)
+    elif factor_name.startswith("realized_vol_"):
+        days = int(factor_name.split("_")[2].replace("d", ""))
+        factor = prices["close"].pct_change().rolling(days).std()
+    else:
+        return 0.0
+    return compute_ic(factor.dropna(), fwd_return.dropna())
+
+async def score_ticker_factors(ticker: str) -> list[dict]:
+    prices = await asyncio.to_thread(
+        lambda: yf.download(ticker, period="1y", interval="1d", progress=False)
+    )
+    if prices.empty or len(prices) < 60:
+        return []
+    prices.columns = [c.lower() for c in prices.columns]
+    results = []
+    for bucket, factors in ALPHA_BUCKETS.items():
+        for factor_name in factors:
+            ic = compute_factor_ic(ticker, factor_name, prices)
+            results.append({
+                "name": factor_name,
+                "bucket": bucket,
+                "ic": ic,
+                "status": classify_factor(ic),
+            })
+    return results
+```
+
+---
+
+#### Step 3 — Add `FactorScore` model to `memory/database.py`
+
+**File:** `memory/database.py`  
+**Change:** เพิ่ม `FactorScore` table + `ALTER TABLE` migration ใน `init_db()`
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Factor history | ไม่ถูก persist — คำนวณแล้วทิ้ง | เก็บใน PostgreSQL, query ได้ตลอดเวลา |
+| Dashboard data | ไม่มี factor data | Factor leaderboard endpoint พร้อม serve `GET /factors` |
+| Trend visibility | ไม่มี | ติดตาม IC drift — เห็นเมื่อ factor เริ่ม degrade |
+
+```python
+# เพิ่มใน memory/database.py
+class FactorScore(Base):
+    __tablename__ = "factor_scores"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String(20), index=True)
+    name: Mapped[str] = mapped_column(String(50))          # "ret_3m", "roe", etc.
+    bucket: Mapped[str] = mapped_column(String(20))        # momentum | value | quality | liquidity | volatility
+    ic: Mapped[float] = mapped_column(Float)               # Spearman IC vs 5d forward return
+    status: Mapped[str] = mapped_column(String(10))        # alive | reversed | dead
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+# เพิ่มใน init_db() หลัง grade columns migration:
+await conn.execute(text(
+    "CREATE TABLE IF NOT EXISTS factor_scores ("
+    "id SERIAL PRIMARY KEY, ticker VARCHAR(20), name VARCHAR(50), "
+    "bucket VARCHAR(20), ic FLOAT, status VARCHAR(10), computed_at TIMESTAMPTZ"
+    ")"
+))
+```
+
+---
+
+#### Step 4 — Add `weekly_factor_scoring` Celery Beat task
+
+**File:** `scheduler/tasks.py`  
+**Change:** เพิ่ม task `run_factor_scoring` + เพิ่มเข้า `beat_schedule` ทุกวันจันทร์ 06:00 UTC
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Factor scoring | Manual / ไม่เคยทำ | รันทุกจันทร์, auto-update `factor_scores` table |
+| FinancialAnalyst freshness | 17 metrics เดิมตลอด | Factor set refresh ทุกสัปดาห์ |
+| Operational cost | N/A | ~1 yfinance call per ticker per week — negligible |
+
+```python
+# เพิ่มใน scheduler/tasks.py
+@celery_app.task(name="scheduler.tasks.run_factor_scoring")
+def run_factor_scoring() -> None:
+    from agents.factor_library import score_ticker_factors
+    from memory.database import AsyncSessionLocal, FactorScore
+
+    async def _run() -> None:
+        settings = get_settings()
+        async with AsyncSessionLocal() as session:
+            for ticker in settings.watchlist:
+                scores = await score_ticker_factors(ticker)
+                for s in scores:
+                    session.add(FactorScore(ticker=ticker, **s))
+        await session.commit()
+
+    asyncio.run(_run())
+
+# เพิ่มใน beat_schedule:
+"factor-scoring": {
+    "task": "scheduler.tasks.run_factor_scoring",
+    "schedule": crontab(hour=6, minute=0, day_of_week=1),  # Monday 06:00 UTC
+},
+```
+
+---
+
+#### Step 5 — Inject alive factors into `FinancialAnalystAgent` prompt
+
+**File:** `agents/financial_analyst.py`  
+**Change:** ก่อน build prompt, query `FactorScore` สำหรับ alive factors ของ ticker นั้น แล้ว append เข้า prompt section ถ้าไม่มี factor scores เลย (first run) ให้ fallback ไปใช้ 17-metric block เดิม
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Prompt content | "Revenue Growth: 18%, P/E: 32.1…" — static numbers | + "Alive factors (IC): ret_3m IC=0.38, roe IC=0.31…" |
+| LLM reasoning | LLM เดาเองว่า metric ไหนสำคัญ | LLM รู้ว่า metric ไหน historically predict returns ได้ |
+| Signal quality | Baseline | คาดว่า directional accuracy สูงขึ้นตาม IC-weighted context |
+
+```python
+# เพิ่มใน financial_analyst.py — helper function
+async def _fetch_alive_factors(ticker: str) -> str:
+    from memory.database import AsyncSessionLocal, FactorScore
+    from sqlalchemy import select
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(
+            select(FactorScore)
+            .where(FactorScore.ticker == ticker, FactorScore.status == "alive")
+            .order_by(FactorScore.ic.desc())
+            .limit(10)
+        )).scalars().all()
+    if not rows:
+        return ""
+    lines = [f"  {r.name} [{r.bucket}] IC={r.ic:.3f}" for r in rows]
+    return "Alive Alpha Factors (IC vs 5d forward return):\n" + "\n".join(lines)
+
+# แก้ใน FinancialAnalystAgent.run() — เพิ่มหลัง _fmt_metrics():
+factor_section = await _fetch_alive_factors(symbol)
+prompt = (
+    f"Ticker: {symbol}\n\nFinancial Metrics:\n{formatted}\n\n"
+    + (f"{factor_section}\n\n" if factor_section else "")
+    + "Assess this company's financial health and investment outlook.\n\n"
+    + "Respond EXACTLY in this format:\n"
+    + "SIGNAL: <bullish|bearish|watchlist>\n"
+    + "CONFIDENCE: <0.0-1.0>\n"
+    + "SHORT: <S|A|B|C>\n"
+    + "MID: <S|A|B|C>\n"
+    + "LONG: <S|A|B|C>\n"
+    + "RATIONALE: <2-3 sentence assessment>\n\n"
+    + "Grades: S=Strong Buy, A=Buy, B=Hold, C=Sell"
+)
+```
+
+---
+
+### PR #6 — Multi-factor Composite Scoring (5 steps)
+
+---
+
+#### Step 6 — Create `intelligence/composite_scorer.py`
+
+**File:** `intelligence/composite_scorer.py` *(ไฟล์ใหม่)*  
+**Change:** `CompositeScorer` class โหลด alive `FactorScore` records, weight 4 buckets ตาม mean IC, คำนวณ composite score 0–100 ต่อ ticker, map เป็น S/A/B/C
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Grade source | LLM judgment ล้วนๆ — "feels like an A" | `composite = Σ(bucket_score × IC_weight)` — math-backed |
+| Grade consistency | Ticker เดียวกันอาจได้ A วันนี้, B พรุ่งนี้ ด้วย data เดิม | Deterministic: input เดิม → grade เดิมเสมอ |
+| Grade meaning | Relative opinion | Top 20% universe = S, 20–40% = A, 40–60% = B, rest = C |
+| Transparency | Black box | Breakdown: "composite 78: momentum 85, value 70, quality 80" |
+
+```python
+# intelligence/composite_scorer.py
+from __future__ import annotations
+import numpy as np
+
+class CompositeScorer:
+    def __init__(self, factor_scores: list):
+        self.weights = self._compute_weights(factor_scores)
+
+    def _compute_weights(self, factor_scores) -> dict[str, float]:
+        ic_by_bucket: dict[str, list[float]] = {}
+        for fs in factor_scores:
+            if fs.status == "alive":
+                ic_by_bucket.setdefault(fs.bucket, []).append(abs(fs.ic))
+        if not ic_by_bucket:
+            return {"momentum": 0.25, "value": 0.25, "quality": 0.25, "sentiment": 0.25}
+        total = sum(np.mean(v) for v in ic_by_bucket.values())
+        weights = {k: np.mean(v) / total for k, v in ic_by_bucket.items()}
+        weights.setdefault("sentiment", 0.1)  # always include sentiment
+        return weights
+
+    def score(self, bucket_scores: dict[str, float]) -> dict:
+        """bucket_scores: {"momentum": 0-100, "value": 0-100, "quality": 0-100, "sentiment": 0-100}"""
+        composite = sum(
+            bucket_scores.get(k, 50) * self.weights.get(k, 0.25)
+            for k in ["momentum", "value", "quality", "sentiment"]
+        )
+        grade = "S" if composite >= 80 else "A" if composite >= 60 else "B" if composite >= 40 else "C"
+        return {
+            "composite": round(composite, 1),
+            "components": bucket_scores,
+            "grade": grade,
+        }
+
+async def build_composite_scorer(ticker: str) -> CompositeScorer:
+    from memory.database import AsyncSessionLocal, FactorScore
+    from sqlalchemy import select
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(
+            select(FactorScore).where(FactorScore.ticker == ticker)
+        )).scalars().all()
+    return CompositeScorer(rows)
+```
+
+---
+
+#### Step 7 — Add `composite_score` + `composite_breakdown` to `Signal` model
+
+**File:** `memory/database.py`  
+**Change:** เพิ่ม 2 columns ใน `Signal` + `ALTER TABLE IF NOT EXISTS` ใน `init_db()`
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Signal record | grade_short/mid/long เท่านั้น | + composite_score (0–100) + composite_breakdown JSON |
+| API payload | ไม่มี composite data | `GET /signals` return composite score ให้ frontend แสดง |
+| Outcome correlation | ไม่สามารถ correlate score กับ outcome | `SignalOutcome` join ดูได้ว่า composite สูง → outcome ดีกว่าไหม |
+
+```python
+# เพิ่มใน Signal model:
+composite_score: Mapped[float | None] = mapped_column(Float)
+composite_breakdown: Mapped[dict | None] = mapped_column(JSON)
+
+# เพิ่มใน init_db() migrations:
+for col, typ in [("composite_score", "FLOAT"), ("composite_breakdown", "JSONB")]:
+    await conn.execute(text(
+        f"ALTER TABLE signals ADD COLUMN IF NOT EXISTS {col} {typ}"
+    ))
+```
+
+---
+
+#### Step 8 — Wire `CompositeScorer` into `FinancialAnalystAgent`
+
+**File:** `agents/financial_analyst.py`  
+**Change:** หลัง LLM response, สร้าง `CompositeScorer`, คำนวณ bucket scores จาก metrics, เรียก `.score()`, บันทึก `composite_score` และ `composite_breakdown` ใน `Signal` record
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Grade assignment | LLM output → grade (ไม่มี cross-check) | LLM grade + composite grade → final grade (composite wins ถ้า conflict) |
+| Signal record | `{signal_type, confidence, grade_short/mid/long, rationale}` | + `{composite_score: 78, composite_breakdown: {...}}` |
+
+```python
+# เพิ่มใน FinancialAnalystAgent.run() — หลัง _parse_response():
+from intelligence.composite_scorer import build_composite_scorer
+
+scorer = await build_composite_scorer(symbol)
+roe = metrics.get("returnOnEquity", 0) or 0
+pe = metrics.get("trailingPE", 30) or 30
+rev_growth = metrics.get("revenueGrowth", 0) or 0
+sentiment_val = 70.0 if signal_type == "bullish" else 30.0 if signal_type == "bearish" else 50.0
+
+bucket_scores = {
+    "momentum": min(100, max(0, 50 + rev_growth * 100)),
+    "value":    min(100, max(0, 100 - pe)),
+    "quality":  min(100, max(0, roe * 100)),
+    "sentiment": sentiment_val,
+}
+composite = scorer.score(bucket_scores)
+
+# บันทึกลง Signal:
+session.add(Signal(
+    ticker=symbol,
+    signal_type=signal_type,
+    confidence=confidence,
+    source_agent=self.name,
+    rationale=rationale,
+    grade_short=composite["grade"],   # composite grade overrides LLM grade
+    grade_mid=gm,
+    grade_long=gl,
+    composite_score=composite["composite"],
+    composite_breakdown=composite["components"],
+    meta={"metrics_count": len(metrics)},
+))
+```
+
+---
+
+#### Step 9 — Add composite score to Discord digest
+
+**File:** `intelligence/discord_notifier.py`  
+**Change:** ใน signal embed block เพิ่ม line: `Composite: 78 · momentum↑ · value↑ · quality↑`
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Discord signal card | "AAPL — BULLISH — A/A/B — confidence 0.82" | + "Composite: 78 · momentum 85 · value 70 · quality 80" |
+| Human readability | Grade ไม่มีคำอธิบาย | Grade มี quantitative backing ให้เห็นทันที |
+
+```python
+# แก้ใน discord_notifier.py — signal embed field:
+composite_score = sig.get("composite_score")
+breakdown = sig.get("composite_breakdown") or {}
+if composite_score is not None:
+    parts = " · ".join(f"{k} {v:.0f}" for k, v in breakdown.items())
+    embed_fields.append({"name": "Composite", "value": f"{composite_score:.0f} ({parts})", "inline": False})
+```
+
+---
+
+#### Step 10 — Write tests for PR #5 + PR #6
+
+**File:** `tests/test_factor_library.py`, `tests/test_composite_scorer.py` *(ไฟล์ใหม่)*
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Test coverage | FinancialAnalyst tested | + factor IC/IR logic + CompositeScorer grade mapping |
+| Regression safety | ไม่มี | Grade mapping และ weight calculation ถูก pin ไว้ |
+
+```python
+# tests/test_factor_library.py
+def test_classify_factor():
+    from agents.factor_library import classify_factor
+    assert classify_factor(0.40) == "alive"
+    assert classify_factor(-0.40) == "reversed"
+    assert classify_factor(0.02) == "dead"
+
+def test_compute_ic_perfect():
+    from agents.factor_library import compute_ic
+    import pandas as pd
+    s = pd.Series([1, 2, 3, 4, 5], dtype=float)
+    assert compute_ic(s, s) == pytest.approx(1.0)
+
+# tests/test_composite_scorer.py
+def test_grade_mapping():
+    from intelligence.composite_scorer import CompositeScorer
+    scorer = CompositeScorer([])  # no factor scores → equal weights
+    assert scorer.score({"momentum":90,"value":90,"quality":90,"sentiment":90})["grade"] == "S"
+    assert scorer.score({"momentum":30,"value":30,"quality":30,"sentiment":30})["grade"] == "C"
+```
+
+---
+
+### PR #7 — Shadow Account (5 steps)
+
+---
+
+#### Step 11 — Add `POST /portfolio/upload-trades` endpoint
+
+**File:** `cockpit/routers/portfolio.py` *(ไฟล์ใหม่)*, register ใน `cockpit/app.py`  
+**Change:** รับ CSV upload (Alpaca broker export format), parse rows เป็น list of trade dicts
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Human trade data | ไม่ถูก ingest — ไม่มี visibility ว่า human ทำอะไร | CSV upload → เปรียบเทียบกับ system signals ได้ |
+| Behavioral loop | System fire signals ออกไปแล้วไม่รู้ผล | System เห็นได้ว่า human approve/reject/ignore signal ไหน |
+
+```python
+# cockpit/routers/portfolio.py
+from fastapi import APIRouter, UploadFile, File
+import csv, io
+
+router = APIRouter(prefix="/portfolio", tags=["portfolio"])
+
+@router.post("/upload-trades")
+async def upload_trades(file: UploadFile = File(...)):
+    content = await file.read()
+    reader = csv.DictReader(io.StringIO(content.decode()))
+    trades = [row for row in reader]
+    return {"trades_parsed": len(trades), "trades": trades}
+```
+
+---
+
+#### Step 12 — Create `agents/shadow_account.py`
+
+**File:** `agents/shadow_account.py` *(ไฟล์ใหม่)*  
+**Change:** `ShadowAccountAgent` รับ `trade_history` (CSV rows) + `signal_outcomes` (จาก `SignalOutcome` table) แล้วให้ LLM identify: trading style, top 3 biases, grade acceptance rate, optimal hold period, divergence alpha
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Self-awareness | System track signal accuracy แต่ไม่รู้ human behavior | System รู้: "Human approve 90% S grades, 40% B grades" |
+| Bias detection | ไม่มี | "Loss aversion — human ถือ loser นาน 3× กว่า winner" |
+| Divergence tracking | ไม่มี | "เมื่อ human deviate จาก system: +2% extra return เฉลี่ย" |
+
+```python
+# agents/shadow_account.py
+import json
+from agents.base import BaseAgent
+from intelligence.llm import analyze
+
+class ShadowAccountAgent(BaseAgent):
+    name = "shadow_account"
+
+    async def analyze(self, trade_history: list[dict], signal_outcomes: list[dict]) -> dict:
+        prompt = f"""
+Analyze these human trades: {json.dumps(trade_history[:50])}
+Against these system signal outcomes: {json.dumps(signal_outcomes[:50])}
+
+Identify:
+1. Dominant trading style (momentum/mean-reversion/breakout/value)
+2. Top 3 behavioral biases (FOMO, loss aversion, sector concentration, overtrading)
+3. Grade acceptance rate: which grades (S/A/B/C) does the human approve vs. reject?
+4. Optimal holding period based on actual vs. expected returns
+5. Divergence: when does human deviate from system and was it profitable?
+
+Reply ONLY JSON:
+{{
+  "style": "...",
+  "biases": ["...", "...", "..."],
+  "grade_acceptance": {{"S": 0.9, "A": 0.7, "B": 0.4, "C": 0.1}},
+  "optimal_hold_days": 5,
+  "best_pattern": "...",
+  "worst_pattern": "...",
+  "divergence_alpha": 0.02
+}}
+"""
+        response = await analyze(prompt, system="You are a behavioral finance analyst.", max_tokens=400)
+        try:
+            result = json.loads(response)
+        except Exception:
+            result = {"error": "parse_failed", "raw": response}
+        await self.log("analyze", f"Shadow report generated — style: {result.get('style', 'unknown')}")
+        return result
+```
+
+---
+
+#### Step 13 — Add `POST /portfolio/shadow-report` endpoint + connect to frontend
+
+**File:** `cockpit/routers/portfolio.py`, `frontend/app/page.tsx`  
+**Change:** เพิ่ม endpoint ที่รับ `trade_history` JSON แล้วเรียก `ShadowAccountAgent.analyze()` return Shadow Report. เพิ่ม panel "Your Trading Style" ใน dashboard
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Dashboard | Signal cards + agent status + activity log | + Shadow Report: style, biases, grade acceptance, divergence |
+| Actionable insight | ไม่มีนอกจาก signal confidence | "คุณมักจะ override B signals — historically -1.5% avg return" |
+
+```python
+# เพิ่มใน cockpit/routers/portfolio.py
+@router.post("/shadow-report")
+async def shadow_report(trades: list[dict], session: AsyncSession = Depends(get_session)):
+    from agents.shadow_account import ShadowAccountAgent
+    from memory.database import SignalOutcome
+    from sqlalchemy import select
+    outcomes = (await session.execute(
+        select(SignalOutcome).order_by(SignalOutcome.created_at.desc()).limit(100)
+    )).scalars().all()
+    outcomes_data = [
+        {"ticker": o.ticker, "signal_type": o.signal_type, "outcome_5d": o.outcome_5d}
+        for o in outcomes
+    ]
+    report = await ShadowAccountAgent().analyze(trades, outcomes_data)
+    return report
+```
+
+---
+
+#### Step 14 — Write tests for PR #7
+
+**File:** `tests/test_shadow_account.py` *(ไฟล์ใหม่)*
+
+```python
+# tests/test_shadow_account.py
+import json
+from unittest.mock import AsyncMock, patch
+
+async def test_shadow_account_parse():
+    from agents.shadow_account import ShadowAccountAgent
+    mock_response = json.dumps({
+        "style": "momentum",
+        "biases": ["FOMO", "loss_aversion"],
+        "grade_acceptance": {"S": 0.9, "A": 0.7, "B": 0.3, "C": 0.1},
+        "optimal_hold_days": 5,
+        "best_pattern": "early momentum",
+        "worst_pattern": "holding losers",
+        "divergence_alpha": 0.015,
+    })
+    with patch("agents.shadow_account.analyze", new_callable=AsyncMock, return_value=mock_response):
+        agent = ShadowAccountAgent()
+        result = await agent.analyze(
+            trade_history=[{"ticker": "AAPL", "side": "buy", "qty": 10}],
+            signal_outcomes=[{"ticker": "AAPL", "signal_type": "bullish", "outcome_5d": "correct"}],
+        )
+    assert result["style"] == "momentum"
+    assert result["divergence_alpha"] == pytest.approx(0.015)
+```
+
+---
+
+### PR #3 — Smart Heartbeat (4 steps)
+
+---
+
+#### Step 15 — Add `should_notify()` to `intelligence/summarizer.py`
+
+**File:** `intelligence/summarizer.py`  
+**Change:** เพิ่ม method `should_notify(signals, risk_status) -> dict` เรียก LLM ด้วย compact prompt return `{"notify": bool, "reason": str, "urgency": "immediate"|"scheduled"}`
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Digest trigger | ทุก 6h — fixed cron, ไม่ตรวจ content | Post เฉพาะเมื่อ LLM ตัดสินว่ามีอะไรน่า action |
+| Discord frequency | 4× ต่อวันเสมอ | 0–4× ต่อวัน ตามสภาพตลาด |
+| Noise level | สูง — digest ว่างๆ บ่อย | ลดลง — AgentLog บันทึก suppress ทุกครั้งพร้อม reason |
+
+```python
+# เพิ่มใน intelligence/summarizer.py
+import json as _json
+
+async def should_notify(self, signals: list, risk_status: dict) -> dict:
+    prompt = f"""
+Given these recent market signals: {_json.dumps(signals[:10])}
+And risk status: {_json.dumps(risk_status)}
+
+Is there anything requiring immediate human attention?
+Consider: grade S or A signals, circuit breakers, unusual volatility.
+
+Reply ONLY JSON: {{"notify": true, "reason": "...", "urgency": "immediate|scheduled"}}
+"""
+    from intelligence.llm import analyze
+    response = await analyze(prompt, system="You are a market monitoring system.", max_tokens=100)
+    try:
+        return _json.loads(response)
+    except Exception:
+        return {"notify": True, "reason": "parse error — defaulting to notify", "urgency": "scheduled"}
+```
+
+---
+
+#### Step 16 — Add immediate Celery triggers in `scheduler/tasks.py`
+
+**File:** `scheduler/tasks.py`  
+**Change:** ใน `run_sentiment_analyst` และ `run_risk_monitor` — หลัง agent run, ตรวจว่ามี grade-A/S signal หรือ circuit breaker ถ้าใช่ call `run_digest.apply_async()` ทันที
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Grade A signal → Discord | รอสูงสุด 6h | Post ภายในไม่กี่วินาทีหลัง detect |
+| Circuit breaker → Discord | รอสูงสุด 6h | Post ทันที |
+| Response model | Fixed-interval เท่านั้น | Event-driven สำหรับ high-urgency |
+
+```python
+# แก้ run_sentiment_analyst task:
+@celery_app.task(name="scheduler.tasks.run_sentiment_analyst")
+def run_sentiment_analyst() -> None:
+    from agents.sentiment_analyst import SentimentAnalystAgent
+    asyncio.run(SentimentAnalystAgent().run())
+    # check for grade A/S signals in last 10 min → immediate digest
+    _maybe_trigger_digest(grade_threshold={"S", "A"})
+
+def _maybe_trigger_digest(grade_threshold: set[str]) -> None:
+    import asyncio as _asyncio
+    from memory.database import AsyncSessionLocal, Signal
+    from sqlalchemy import select
+    from datetime import datetime, UTC, timedelta
+
+    async def _check() -> bool:
+        cutoff = datetime.now(UTC) - timedelta(minutes=10)
+        async with AsyncSessionLocal() as session:
+            row = (await session.execute(
+                select(Signal.id)
+                .where(
+                    Signal.grade_short.in_(grade_threshold),
+                    Signal.created_at >= cutoff,
+                )
+                .limit(1)
+            )).first()
+        return row is not None
+
+    if _asyncio.run(_check()):
+        run_digest.apply_async()
+```
+
+---
+
+#### Step 17 — Add urgency label + suppression log
+
+**Files:** `intelligence/discord_notifier.py`, `scheduler/tasks.py`  
+**Change:** Discord embed ได้รับ label field: `⚡ Immediate Alert` หรือ `📊 Scheduled Digest`. Digest ที่ถูก skip เรียก `AgentLog` บันทึก reason
+
+| Aspect | Before | After |
+| --- | --- | --- |
+| Discord message | Uniform — ไม่มีความแตกต่างด้านความเร่งด่วน | Visual label บอก type ของ alert ทันที |
+| Suppression visibility | Silent — ไม่รู้ว่า digest ถูก skip | Cockpit log แสดง: "Digest suppressed — 0 grade-A signals (reason: slow market)" |
+
+```python
+# แก้ run_digest task — เพิ่ม should_notify check:
+@celery_app.task(name="scheduler.tasks.run_digest")
+def run_digest(urgency: str = "scheduled") -> None:
+    from intelligence.discord_notifier import send_digest_embed
+    from intelligence.summarizer import build_digest
+
+    async def _run() -> None:
+        from intelligence.discord_notifier import send_message
+        digest, count, signals, risk = await build_digest(hours=6)
+        if count == 0:
+            await send_message("📭 No articles in the last 6h.")
+            return
+        label = "⚡ Immediate Alert" if urgency == "immediate" else "📊 Scheduled Digest"
+        await send_digest_embed(digest, article_count=count, hours=6, signals=signals, risk=risk, label=label)
+
+    asyncio.run(_run())
+
+# แก้ใน send_digest_embed signature — รับ label parameter:
+async def send_digest_embed(..., label: str = "📊 Scheduled Digest") -> None:
+    # เพิ่ม label เป็น embed footer หรือ title prefix
+```
+
+---
+
+#### Step 18 — Write tests for PR #3
+
+**File:** `tests/test_smart_heartbeat.py` *(ไฟล์ใหม่)*
+
+```python
+# tests/test_smart_heartbeat.py
+import json
+from unittest.mock import AsyncMock, patch
+
+async def test_should_notify_true():
+    from intelligence.summarizer import MarketSummarizer
+    mock_resp = json.dumps({"notify": True, "reason": "Grade A signal on NVDA", "urgency": "immediate"})
+    with patch("intelligence.summarizer.analyze", new_callable=AsyncMock, return_value=mock_resp):
+        summarizer = MarketSummarizer()
+        result = await summarizer.should_notify(
+            signals=[{"ticker": "NVDA", "grade_short": "A"}],
+            risk_status={"circuit_breaker": False}
+        )
+    assert result["notify"] is True
+    assert result["urgency"] == "immediate"
+
+async def test_should_notify_suppress():
+    from intelligence.summarizer import MarketSummarizer
+    mock_resp = json.dumps({"notify": False, "reason": "No significant moves", "urgency": "scheduled"})
+    with patch("intelligence.summarizer.analyze", new_callable=AsyncMock, return_value=mock_resp):
+        summarizer = MarketSummarizer()
+        result = await summarizer.should_notify(signals=[], risk_status={"circuit_breaker": False})
+    assert result["notify"] is False
+```
+
+---
+
+### Final Step — `make check`
+
+**ก่อน declare Phase 8 done** ต้อง run:
+
+```bash
+make check   # lint + full test suite
+```
+
+Phase 8 เพิ่ม 3 agents ใหม่, 1 DB model ใหม่, 2 intelligence modules — test suite ต้อง pass clean ก่อน merge
+
+**Expected test count:** 197 (ปัจจุบัน) + ~20 tests ใหม่ = ~217 tests passing
+
+---
+
+### สรุป Before vs After รวม (Phase 8)
+
+| Dimension | Before Phase 8 | After Phase 8 |
+| --- | --- | --- |
+| Signal basis | 17 static metrics + LLM opinion | IC/IR-scored alive factors + math-backed composite |
+| Grade meaning | Subjective A/B/C | Top 20% = S, verified by IC vs forward return |
+| Grade consistency | Variable per LLM call | Deterministic composite score |
+| Discord frequency | 4× day fixed | Event-driven, suppressed when quiet |
+| Human behavior insight | None | Shadow Report: biases, style, divergence alpha |
+| Factor freshness | Static forever | Auto-refreshed weekly via Celery Beat |
+| Test coverage | 197 tests | ~217 tests |
