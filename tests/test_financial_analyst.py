@@ -97,11 +97,11 @@ async def test_run_creates_bullish_signal(db_session, db_engine):
     from agents.financial_analyst import FinancialAnalystAgent
 
     with patch("agents.financial_analyst._fetch_metrics", return_value=_STRONG_METRICS), \
-         patch("agents.financial_analyst._settings") as s:
-        s.use_local_llm = False
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
         s.watchlist = ["AAPL"]
-        with patch("intelligence.claude_client.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
-            await FinancialAnalystAgent().run()
+        await FinancialAnalystAgent().run()
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         sig = (await s.execute(
@@ -120,11 +120,11 @@ async def test_run_creates_bearish_signal(db_session, db_engine):
     from agents.financial_analyst import FinancialAnalystAgent
 
     with patch("agents.financial_analyst._fetch_metrics", return_value=_WEAK_METRICS), \
-         patch("agents.financial_analyst._settings") as s:
-        s.use_local_llm = False
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BEARISH_RESPONSE)):
         s.watchlist = ["TSLA"]
-        with patch("intelligence.claude_client.analyze", new=AsyncMock(return_value=_BEARISH_RESPONSE)):
-            await FinancialAnalystAgent().run()
+        await FinancialAnalystAgent().run()
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         sig = (await s.execute(
@@ -174,11 +174,11 @@ async def test_run_specific_ticker(db_session, db_engine):
     from agents.financial_analyst import FinancialAnalystAgent
 
     with patch("agents.financial_analyst._fetch_metrics", return_value=_STRONG_METRICS), \
-         patch("agents.financial_analyst._settings") as s:
-        s.use_local_llm = False
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
         s.watchlist = ["AAPL", "TSLA", "NVDA"]
-        with patch("intelligence.claude_client.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
-            await FinancialAnalystAgent().run(ticker="NVDA")
+        await FinancialAnalystAgent().run(ticker="NVDA")
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         signals = (await s.execute(
@@ -193,11 +193,11 @@ async def test_run_writes_agent_log(db_session, db_engine):
     from agents.financial_analyst import FinancialAnalystAgent
 
     with patch("agents.financial_analyst._fetch_metrics", return_value=_STRONG_METRICS), \
-         patch("agents.financial_analyst._settings") as s:
-        s.use_local_llm = False
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
         s.watchlist = ["AAPL"]
-        with patch("intelligence.claude_client.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
-            await FinancialAnalystAgent().run()
+        await FinancialAnalystAgent().run()
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         logs = (await s.execute(

@@ -2,7 +2,7 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, JSON, String, Text, text, ForeignKey
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, text
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
@@ -67,6 +67,8 @@ class Signal(Base):
     grade_short: Mapped[str | None] = mapped_column(String(1))  # S | A | B | C
     grade_mid: Mapped[str | None] = mapped_column(String(1))
     grade_long: Mapped[str | None] = mapped_column(String(1))
+    composite_score: Mapped[float | None] = mapped_column(Float)  # 0–100 IC-weighted score
+    composite_breakdown: Mapped[dict] = mapped_column(JSON, default=dict)  # per-bucket scores
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
@@ -168,3 +170,10 @@ async def init_db() -> None:
             await conn.execute(text(
                 f"ALTER TABLE signals ADD COLUMN IF NOT EXISTS {col} VARCHAR(1)"
             ))
+        # Phase 8 migration — add composite score columns to existing signals table
+        await conn.execute(text(
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS composite_score DOUBLE PRECISION"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS composite_breakdown JSON"
+        ))

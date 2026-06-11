@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from agents.base import BaseAgent
+from agents.factor_library import get_factor_context
 from config.settings import get_settings
 from memory.database import AsyncSessionLocal, Signal
 
@@ -105,13 +106,15 @@ class FinancialAnalystAgent(BaseAgent):
 
             metrics = await asyncio.to_thread(_fetch_metrics, symbol)
             if len(metrics) < 5:
-                await self.log("skip", f"{symbol}: insufficient financial data ({len(metrics)} metrics)")
+                await self.log("skip", f"{symbol}: insufficient data ({len(metrics)} metrics)")
                 continue
 
             formatted = _fmt_metrics(metrics)
+            factor_context = await get_factor_context(symbol)
             prompt = (
                 f"Ticker: {symbol}\n\nFinancial Metrics:\n{formatted}\n\n"
-                "Assess this company's financial health and investment outlook.\n\n"
+                + (factor_context + "\n\n" if factor_context else "")
+                + "Assess this company's financial health and investment outlook.\n\n"
                 "Respond EXACTLY in this format:\n"
                 "SIGNAL: <bullish|bearish|watchlist>\n"
                 "CONFIDENCE: <0.0-1.0>\n"

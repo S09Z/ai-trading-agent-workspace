@@ -1,6 +1,7 @@
 import asyncio
 
 from celery import Celery
+from celery.schedules import crontab
 
 from config.settings import get_settings
 
@@ -74,6 +75,25 @@ def run_discovery_agent() -> None:
     asyncio.run(DiscoveryAgent().run())
 
 
+# ── Phase 8 tasks ──────────────────────────────────────────────────────────────
+
+@celery_app.task(name="scheduler.tasks.run_factor_scoring")
+def run_factor_scoring() -> None:
+    from agents.factor_library import score_ticker_factors
+    from memory.database import AsyncSessionLocal, FactorScore
+
+    async def _run() -> None:
+        settings = get_settings()
+        async with AsyncSessionLocal() as session:
+            for ticker in settings.watchlist:
+                scores = await score_ticker_factors(ticker)
+                for s in scores:
+                    session.add(FactorScore(ticker=ticker, **s))
+            await session.commit()
+
+    asyncio.run(_run())
+
+
 # ── Phase 7 tasks ──────────────────────────────────────────────────────────────
 
 @celery_app.task(name="scheduler.tasks.run_memory_agent")
@@ -141,5 +161,10 @@ celery_app.conf.beat_schedule = {
     "discovery-agent": {
         "task": "scheduler.tasks.run_discovery_agent",
         "schedule": 21600.0,                                  # every 6 hours (aligned with digest)
+    },
+    # Phase 8 — factor scoring
+    "factor-scoring": {
+        "task": "scheduler.tasks.run_factor_scoring",
+        "schedule": crontab(hour=6, minute=0, day_of_week=1),  # Monday 06:00 UTC
     },
 }
