@@ -116,6 +116,38 @@ async def test_signal_default_meta(db_session):
     assert signal.meta == {}
 
 
+async def test_signal_composite_score_defaults(db_session):
+    """New composite columns default to None / empty dict when unset."""
+    signal = Signal(
+        ticker="QQQ", signal_type="bullish", confidence=0.7, source_agent="financial_analyst"
+    )
+    db_session.add(signal)
+    await db_session.commit()
+    await db_session.refresh(signal)
+
+    assert signal.composite_score is None
+    assert signal.composite_breakdown == {}
+
+
+async def test_signal_composite_score_persists(db_session):
+    """composite_score + composite_breakdown round-trip through the DB."""
+    signal = Signal(
+        ticker="NVDA",
+        signal_type="bullish",
+        confidence=0.9,
+        source_agent="financial_analyst",
+        composite_score=74.5,
+        composite_breakdown={"momentum": 82.0, "volatility": 71.0, "quality": 68.0},
+    )
+    db_session.add(signal)
+    await db_session.commit()
+    await db_session.refresh(signal)
+
+    assert signal.composite_score == pytest.approx(74.5)
+    assert signal.composite_breakdown["momentum"] == pytest.approx(82.0)
+    assert set(signal.composite_breakdown.keys()) == {"momentum", "volatility", "quality"}
+
+
 # ── AgentLog ───────────────────────────────────────────────────────────────────
 
 async def test_agent_log_create(db_session):
