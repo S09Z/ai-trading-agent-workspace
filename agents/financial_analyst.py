@@ -7,6 +7,7 @@ from sqlalchemy import select
 from agents.base import BaseAgent
 from agents.factor_library import get_factor_context
 from config.settings import get_settings
+from intelligence.composite_scorer import compute_composite
 from memory.database import AsyncSessionLocal, Signal
 
 _settings = get_settings()
@@ -130,6 +131,9 @@ class FinancialAnalystAgent(BaseAgent):
 
             signal_type, confidence, gs, gm, gl, rationale = _parse_response(response)
 
+            composite = await compute_composite(symbol)
+            has_factors = bool(composite["breakdown"])
+
             async with AsyncSessionLocal() as session:
                 session.add(Signal(
                     ticker=symbol,
@@ -140,6 +144,8 @@ class FinancialAnalystAgent(BaseAgent):
                     grade_short=gs,
                     grade_mid=gm,
                     grade_long=gl,
+                    composite_score=composite["score"] if has_factors else None,
+                    composite_breakdown=composite["breakdown"],
                     meta={"metrics_count": len(metrics)},
                 ))
                 await session.commit()

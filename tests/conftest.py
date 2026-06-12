@@ -43,6 +43,18 @@ async def db_engine(settings):
             ))
         except Exception:
             pass  # plain PostgreSQL without TimescaleDB
+        # Phase 7 migration — grade columns
+        for col in ("grade_short", "grade_mid", "grade_long"):
+            await conn.execute(text(
+                f"ALTER TABLE signals ADD COLUMN IF NOT EXISTS {col} VARCHAR(1)"
+            ))
+        # Phase 8 migration — composite score columns
+        await conn.execute(text(
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS composite_score DOUBLE PRECISION"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS composite_breakdown JSON"
+        ))
     yield engine
     await engine.dispose()
 

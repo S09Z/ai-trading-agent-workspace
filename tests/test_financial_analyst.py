@@ -189,6 +189,54 @@ async def test_run_specific_ticker(db_session, db_engine):
     assert signals[0].ticker == "NVDA"
 
 
+async def test_run_stores_composite_score(db_session, db_engine):
+    """Signal rows carry composite_score + composite_breakdown from CompositeScorer."""
+    from agents.financial_analyst import FinancialAnalystAgent
+
+    composite = {"score": 74.5, "grade": "S", "breakdown": {"momentum": 82.0, "quality": 67.0}}
+    with patch("agents.financial_analyst._fetch_metrics", return_value=_STRONG_METRICS), \
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("agents.financial_analyst.compute_composite",
+               new=AsyncMock(return_value=composite)), \
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
+        s.watchlist = ["AAPL"]
+        await FinancialAnalystAgent().run()
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        sig = (await s.execute(
+            select(Signal)
+            .where(Signal.ticker == "AAPL", Signal.source_agent == "financial_analyst")
+        )).scalars().first()
+
+    assert sig.composite_score == 74.5
+    assert sig.composite_breakdown == {"momentum": 82.0, "quality": 67.0}
+
+
+async def test_run_composite_none_when_no_factor_data(db_session, db_engine):
+    """No factor data (empty breakdown) → composite_score stays None, not 0."""
+    from agents.financial_analyst import FinancialAnalystAgent
+
+    empty = {"score": 0.0, "grade": "C", "breakdown": {}}
+    with patch("agents.financial_analyst._fetch_metrics", return_value=_STRONG_METRICS), \
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("agents.financial_analyst.compute_composite",
+               new=AsyncMock(return_value=empty)), \
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
+        s.watchlist = ["AAPL"]
+        await FinancialAnalystAgent().run()
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        sig = (await s.execute(
+            select(Signal)
+            .where(Signal.ticker == "AAPL", Signal.source_agent == "financial_analyst")
+        )).scalars().first()
+
+    assert sig.composite_score is None
+    assert sig.composite_breakdown == {}
+
+
 async def test_run_writes_agent_log(db_session, db_engine):
     from agents.financial_analyst import FinancialAnalystAgent
 
