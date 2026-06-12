@@ -13,7 +13,7 @@ An AI-native multi-agent trading intelligence platform. Continuously collects, a
 | **ResearchAnalyst** | RAG + past outcome memory deep-dive on hot ticker → Signal + grades | Hourly |
 | **RiskMonitor** | Aggregates price spikes, fires circuit breaker at >3 spikes / 15 min | Every 15 min |
 | **MemoryAgent** | Evaluates past signal accuracy via yfinance, embeds outcomes into Qdrant | Daily |
-| **FinancialAnalyst** | Fetches 17 financial metrics via yfinance, LLM assessment → Signal + grades | Daily |
+| **FinancialAnalyst** | Fetches 17 financial metrics via yfinance + IC-scored alpha factors → LLM assessment → Signal + grades + composite score | Daily |
 | **DiscoveryAgent** | Scans 199-ticker universe for news mention spikes outside watchlist → Signal + grades | Every 6h |
 
 Results are pushed to Discord as a rich market digest every 6 hours, enriched with the Agent Intelligence section (signals, research thesis, risk status).
@@ -192,7 +192,8 @@ Interactive API docs: <http://localhost:8000/docs>
 │   ├── research_analyst.py   # RAG + memory deep-dive → Signal + grades
 │   ├── risk_monitor.py       # Spike aggregation, circuit breaker
 │   ├── memory_agent.py       # Past signal outcome evaluation + Qdrant embedding
-│   ├── financial_analyst.py  # 17 yfinance metrics → LLM → Signal + grades (daily)
+│   ├── factor_library.py     # IC/IR alpha factor library (8 factors, 4 buckets) + get_factor_context()
+│   ├── financial_analyst.py  # 17 yfinance metrics + factor context → LLM → Signal + grades + composite (daily)
 │   └── discovery_agent.py    # Universe ticker mention scan → Signal + grades (every 6h)
 ├── cockpit/             # Agent Cockpit FastAPI backend
 │   ├── app.py           # FastAPI app + CORS
@@ -207,11 +208,12 @@ Interactive API docs: <http://localhost:8000/docs>
 ├── intelligence/
 │   ├── claude_client.py      # Anthropic SDK wrapper
 │   ├── local_client.py       # Ollama wrapper (local LLM)
+│   ├── composite_scorer.py   # IC-weighted 0–100 composite score + S/A/B/C grade per ticker
 │   ├── sentiment.py          # Sentiment analysis via LLM
 │   ├── summarizer.py         # Market digest generation + signal/risk enrichment
 │   └── discord_notifier.py   # Discord webhook embed + Agent Intelligence section
 ├── memory/
-│   ├── database.py      # SQLAlchemy models: Article, Signal (+grades), AgentLog, MarketSnapshot, SignalOutcome
+│   ├── database.py      # SQLAlchemy models: Article, Signal (+grades +composite), AgentLog, MarketSnapshot, SignalOutcome, FactorScore
 │   ├── vector_store.py  # Qdrant RAG (upsert, search)
 │   └── cache.py         # Redis cache helpers
 ├── config/
@@ -221,11 +223,11 @@ Interactive API docs: <http://localhost:8000/docs>
 │   ├── news.py          # RSS + NewsAPI + TARGETED_FEEDS (OKLO/SMR/TMDX) with macro aliases
 │   └── market_data.py   # yfinance OHLCV fetcher
 ├── scheduler/
-│   └── tasks.py         # Celery tasks (news/market/sentiment/risk/research/digest/memory/financial)
+│   └── tasks.py         # Celery tasks (news/market/sentiment/risk/research/digest/memory/financial/factor-scoring)
 ├── scripts/
 │   ├── news_digest.py   # CLI: generate + post Discord digest
 │   └── run_cycle.py     # CLI: run full agent cycle
-├── tests/               # 197 tests (pytest-asyncio)
+├── tests/               # 239 tests (pytest-asyncio)
 ├── docker-compose.yml   # PostgreSQL/TimescaleDB · Qdrant · Redis
 ├── docker-compose.prod.yml  # All 8 production services + Nginx + Prometheus
 ├── ecosystem.config.js  # PM2 process config (cockpit, workers, discord-bot)
@@ -246,6 +248,6 @@ Interactive API docs: <http://localhost:8000/docs>
 | 5 | ✅ Done | VPS deployment — Nginx, Celery Beat, production Docker Compose, `make deploy` |
 | 6 | ✅ Done* | Virtual Office 3D (Three.js), Prometheus monitoring, log rotation — *SSL pending VPS setup |
 | 7 | ✅ Done | Signal memory — `SignalOutcome`, MemoryAgent, memory-augmented RAG, `GET /outcomes`, `GET /outcomes/accuracy` |
-| 8 | 🔄 In Progress | Intelligence expansion — S/A/B/C signal grades (Short/Mid/Long), FinancialAnalystAgent (17 metrics), expanded watchlist (35 tickers + macro), targeted feeds for small-caps, stock universe (`config/universe.py`, 199 tickers), PM2 process management |
+| 8 | 🔄 In Progress | Intelligence expansion — S/A/B/C grades, FinancialAnalystAgent (17 metrics + IC alpha factors), IC/IR factor library (`agents/factor_library.py`, 8 factors / 4 buckets), composite scorer (`intelligence/composite_scorer.py`, 0–100 score + grade, wired into FinancialAnalyst signals), expanded watchlist (35 tickers + macro), 199-ticker universe, PM2 process management |
 | 9 | ✅ Done | DiscoveryAgent — news mention scan across 199-ticker universe, `make discover`, Celery every 6h |
 | 10 | 🔜 Planned | Live execution — Alpaca paper/live trading, TradeExecutor, position management, P&L dashboard |
