@@ -47,13 +47,14 @@ class ResearchAnalystAgent(BaseAgent):
             if d.get("type") == "signal_outcome" and d.get("ticker") == target
         ]
         memory_section = (
-            "\n\nPast signal outcomes:\n" + "\n".join(f"- {l}" for l in memory_lines)
+            "\n\nPast signal outcomes:\n" + "\n".join(f"- {line}" for line in memory_lines)
             if memory_lines else ""
         )
 
         prompt = (
             f"Ticker: {target}\n\nRecent news:\n{news_context}{memory_section}\n\n"
-            "Write a 3-sentence investment thesis: directional bias, key risk, near-term catalyst.\n\n"
+            "Write a 3-sentence investment thesis: directional bias, "
+            "key risk, near-term catalyst.\n\n"
             "Then grade the outlook for each time horizon (S=Strong Buy, A=Buy, B=Hold, C=Sell):\n"
             "SHORT: <grade>\n"
             "MID: <grade>\n"

@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from memory.database import FactorScore
 
-
 # ── _grade (pure function) ─────────────────────────────────────────────────────
 
 def test_grade_s_at_boundary():

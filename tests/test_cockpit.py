@@ -1,13 +1,11 @@
 """Tests for the Agent Cockpit FastAPI endpoints."""
 
-import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cockpit.app import app
 from memory.database import AgentLog, Signal, get_session
-
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
 
@@ -70,7 +68,9 @@ async def test_list_agents_null_when_no_logs(client):
 async def test_list_agents_reflects_latest_log(client, db_engine):
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as s:
-        s.add(AgentLog(agent_name="news_hunter", action="collect", message="Found 5 articles", level="info"))
+        s.add(AgentLog(
+            agent_name="news_hunter", action="collect", message="Found 5 articles", level="info"
+        ))
         await s.commit()
 
     r = await client.get("/agents")
@@ -90,7 +90,9 @@ async def test_agent_logs_empty(client):
 async def test_agent_logs_returns_only_that_agent(client, db_engine):
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as s:
-        s.add(AgentLog(agent_name="sentiment_analyst", action="analyze", message="Done", level="info"))
+        s.add(AgentLog(
+            agent_name="sentiment_analyst", action="analyze", message="Done", level="info"
+        ))
         s.add(AgentLog(agent_name="risk_monitor", action="scan", message="OK", level="info"))
         await s.commit()
 
@@ -104,7 +106,9 @@ async def test_agent_logs_respects_limit(client, db_engine):
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as s:
         for i in range(5):
-            s.add(AgentLog(agent_name="news_hunter", action="collect", message=f"run {i}", level="info"))
+            s.add(AgentLog(
+                agent_name="news_hunter", action="collect", message=f"run {i}", level="info"
+            ))
         await s.commit()
 
     r = await client.get("/agents/news_hunter/logs?limit=3")
@@ -122,8 +126,12 @@ async def test_signals_empty(client):
 async def test_signals_returns_recent(client, db_engine):
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as s:
-        s.add(Signal(ticker="AAPL", signal_type="bullish", confidence=0.8, source_agent="sentiment_analyst"))
-        s.add(Signal(ticker="TSLA", signal_type="bearish", confidence=0.7, source_agent="sentiment_analyst"))
+        s.add(Signal(
+            ticker="AAPL", signal_type="bullish", confidence=0.8, source_agent="sentiment_analyst"
+        ))
+        s.add(Signal(
+            ticker="TSLA", signal_type="bearish", confidence=0.7, source_agent="sentiment_analyst"
+        ))
         await s.commit()
 
     r = await client.get("/signals")
@@ -135,8 +143,12 @@ async def test_signals_returns_recent(client, db_engine):
 async def test_signals_ordered_by_confidence(client, db_engine):
     factory = async_sessionmaker(db_engine, expire_on_commit=False)
     async with factory() as s:
-        s.add(Signal(ticker="LOW", signal_type="bullish", confidence=0.5, source_agent="sentiment_analyst"))
-        s.add(Signal(ticker="HIGH", signal_type="bullish", confidence=0.9, source_agent="sentiment_analyst"))
+        s.add(Signal(
+            ticker="LOW", signal_type="bullish", confidence=0.5, source_agent="sentiment_analyst"
+        ))
+        s.add(Signal(
+            ticker="HIGH", signal_type="bullish", confidence=0.9, source_agent="sentiment_analyst"
+        ))
         await s.commit()
 
     r = await client.get("/signals")
