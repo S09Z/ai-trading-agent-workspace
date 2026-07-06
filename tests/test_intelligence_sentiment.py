@@ -1,6 +1,6 @@
 """Tests for the sentiment classifier — all LLM calls mocked."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -52,34 +52,28 @@ def test_parse_extracts_json_from_surrounding_text():
     assert result["score"] == pytest.approx(0.6)
 
 
-# ── analyze_sentiment (Claude path) ─────────────────────────────────────────
+# ── analyze_sentiment (LLM chokepoint) ──────────────────────────────────────
 
-async def test_analyze_sentiment_returns_dict(mock_claude):
+async def test_analyze_sentiment_returns_dict():
     from intelligence.sentiment import analyze_sentiment
 
-    mock_claude.messages.create.return_value = MagicMock(
-        content=[MagicMock(text='{"sentiment": "bullish", "score": 0.9}')]
-    )
-    with patch("intelligence.sentiment._settings") as s:
-        s.use_local_llm = False
+    with patch("intelligence.llm.analyze", new=AsyncMock(
+        return_value='{"sentiment": "bullish", "score": 0.9}'
+    )):
         result = await analyze_sentiment("NVDA beats earnings", "Revenue up 80% YoY")
 
     assert result["sentiment"] == "bullish"
     assert result["score"] == pytest.approx(0.9)
 
 
-async def test_analyze_sentiment_uses_cached_system_prompt(mock_claude):
-    from intelligence.sentiment import analyze_sentiment
+async def test_analyze_sentiment_forwards_system_prompt():
+    from intelligence.sentiment import _SYSTEM, analyze_sentiment
 
-    mock_claude.messages.create.return_value = MagicMock(
-        content=[MagicMock(text='{"sentiment": "neutral", "score": 0.0}')]
-    )
-    with patch("intelligence.sentiment._settings") as s:
-        s.use_local_llm = False
+    mock_analyze = AsyncMock(return_value='{"sentiment": "neutral", "score": 0.0}')
+    with patch("intelligence.llm.analyze", new=mock_analyze):
         await analyze_sentiment("Fed keeps rates unchanged")
 
-    call_kwargs = mock_claude.messages.create.call_args.kwargs
-    assert call_kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert mock_analyze.call_args.kwargs["system"] == _SYSTEM
 
 
 # ── analyze_sentiment (local path) ──────────────────────────────────────────
