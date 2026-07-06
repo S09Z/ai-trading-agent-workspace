@@ -63,7 +63,7 @@ async def on_command_error(ctx: commands.Context, error: Exception) -> None:
 @bot.command(name="cycle")
 async def cmd_cycle(ctx: commands.Context) -> None:
     """Trigger full agent cycle: news → sentiment → risk → research."""
-    from scheduler.tasks import run_news_hunter, run_sentiment_analyst, run_risk_monitor
+    from scheduler.tasks import run_news_hunter, run_risk_monitor, run_sentiment_analyst
     _queue(run_news_hunter)
     _queue(run_sentiment_analyst)
     _queue(run_risk_monitor)

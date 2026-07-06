@@ -111,7 +111,9 @@ def run_digest() -> None:
         from intelligence.discord_notifier import send_message
         digest, count, signals, risk = await build_digest(hours=6)
         if count > 0:
-            await send_digest_embed(digest, article_count=count, hours=6, signals=signals, risk=risk)
+            await send_digest_embed(
+                digest, article_count=count, hours=6, signals=signals, risk=risk
+            )
         else:
             await send_message("📭 No articles in the last 6h — run `!cycle` to fetch fresh news.")
 

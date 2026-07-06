@@ -1,8 +1,7 @@
 """Agent status endpoints."""
 
-from sqlalchemy import select
-
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cockpit.schemas import AgentStatus, LogEntry

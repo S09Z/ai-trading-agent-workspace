@@ -66,7 +66,11 @@ def _format_intelligence_section(
             lines.append("**🧠 Agent Intelligence**")
         lines.append(f"🔬 {research['ticker']}: {research['rationale'][:200]}")
 
-    if risk and (risk.get("spike_count", 0) > 0 or risk.get("circuit_open") or risk.get("alert_count", 0) > 0):
+    if risk and (
+        risk.get("spike_count", 0) > 0
+        or risk.get("circuit_open")
+        or risk.get("alert_count", 0) > 0
+    ):
         circuit = "🔴 OPEN" if risk.get("circuit_open") else "🟢 CLOSED"
         if not lines:
             lines.append("**🧠 Agent Intelligence**")

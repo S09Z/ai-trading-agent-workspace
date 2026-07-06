@@ -27,7 +27,10 @@ async def run(hours: int, dry_run: bool) -> None:
         print("Nothing to summarise. Run 'make start' to verify DB, then let NewsHunter collect.")
         return
 
-    print(f"Found {count} article(s), {len(signals)} signal(s). Generating digest with {backend}...\n")
+    print(
+        f"Found {count} article(s), {len(signals)} signal(s). "
+        f"Generating digest with {backend}...\n"
+    )
 
     print("─" * 60)
     print(digest)
@@ -39,7 +42,9 @@ async def run(hours: int, dry_run: bool) -> None:
 
     print("\nPosting to Discord...")
     try:
-        await send_digest_embed(digest, article_count=count, hours=hours, signals=signals, risk=risk)
+        await send_digest_embed(
+            digest, article_count=count, hours=hours, signals=signals, risk=risk
+        )
         print("✓ Posted successfully.")
     except ValueError as exc:
         print(f"✗ {exc}")
