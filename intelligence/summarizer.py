@@ -66,6 +66,8 @@ async def fetch_recent_signals(hours: int = 6, limit: int = 10) -> list[dict]:
             "confidence": s.confidence,
             "source_agent": s.source_agent,
             "rationale": s.rationale,
+            "grade_short": s.grade_short,
+            "composite_score": s.composite_score,
         }
         for s in rows
     ]
