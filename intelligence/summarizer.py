@@ -4,6 +4,7 @@ Uses Claude by default. Set USE_LOCAL_LLM=true in .env to use Ollama instead.
 """
 
 from datetime import UTC, datetime, timedelta
+from enum import Enum
 
 from sqlalchemy import func, select
 
@@ -151,3 +152,23 @@ async def build_digest(hours: int = 6) -> tuple[str, int, list[dict], dict]:
     risk = await fetch_risk_status()
     digest = await generate_digest(articles, signals=signals, risk=risk)
     return digest, len(articles), signals, risk
+
+
+class HeartbeatDecision(str, Enum):
+    NOTIFY = "notify"
+    SKIP = "skip"
+
+
+def should_notify(
+    count: int, signals: list[dict], risk: dict
+) -> tuple[HeartbeatDecision, str]:
+    """Decide whether a digest is actionable enough to ping Discord."""
+    if risk.get("circuit_open") or risk.get("spike_count", 0) > 0:
+        return HeartbeatDecision.NOTIFY, "risk active"
+    if any(s["signal_type"] in ("bullish", "bearish") for s in signals):
+        return HeartbeatDecision.NOTIFY, "directional signals present"
+    if any(s["confidence"] >= 0.65 for s in signals):
+        return HeartbeatDecision.NOTIFY, "high-confidence signal"
+    if any(s.get("grade_short") in ("S", "A") for s in signals):
+        return HeartbeatDecision.NOTIFY, "grade-A composite signal"
+    return HeartbeatDecision.SKIP, "no actionable signals"
