@@ -26,11 +26,8 @@ async def test_run_creates_signal_for_given_ticker(db_session, db_engine):
     docs = [{"title": "NVDA GPU demand surges"}, {"title": "NVDA beats Q4 estimates"}]
 
     with patch("agents.research_analyst.search", new=AsyncMock(return_value=docs)), \
-         patch("agents.research_analyst._settings") as s:
-        s.use_local_llm = False
-        mock_analyze = AsyncMock(return_value="Bullish thesis.")
-        with patch("intelligence.claude_client.analyze", new=mock_analyze):
-            await ResearchAnalystAgent().run(ticker="NVDA")
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value="Bullish thesis.")):
+        await ResearchAnalystAgent().run(ticker="NVDA")
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         signals = (await s.execute(
@@ -99,10 +96,8 @@ async def test_run_stores_grades_from_llm(db_session, db_engine):
     llm_response = "Strong bullish thesis.\nSHORT: S\nMID: A\nLONG: B"
 
     with patch("agents.research_analyst.search", new=AsyncMock(return_value=docs)), \
-         patch("agents.research_analyst._settings") as s:
-        s.use_local_llm = False
-        with patch("intelligence.claude_client.analyze", new=AsyncMock(return_value=llm_response)):
-            await ResearchAnalystAgent().run(ticker="AAPL")
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value=llm_response)):
+        await ResearchAnalystAgent().run(ticker="AAPL")
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         sig = (await s.execute(
@@ -119,10 +114,8 @@ async def test_run_writes_agent_log(db_session, db_engine):
 
     docs = [{"title": "AAPL strong iPhone sales"}]
     with patch("agents.research_analyst.search", new=AsyncMock(return_value=docs)), \
-         patch("agents.research_analyst._settings") as s:
-        s.use_local_llm = False
-        with patch("intelligence.claude_client.analyze", new=AsyncMock(return_value="Thesis.")):
-            await ResearchAnalystAgent().run(ticker="AAPL")
+         patch("intelligence.llm.analyze", new=AsyncMock(return_value="Thesis.")):
+        await ResearchAnalystAgent().run(ticker="AAPL")
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         logs = (await s.execute(
