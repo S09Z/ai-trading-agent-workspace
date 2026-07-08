@@ -98,6 +98,25 @@ async def test_fetch_recent_articles_returns_empty_when_db_empty(db_session):
     assert articles == []
 
 
+async def test_fetch_recent_signals_includes_grade_and_score(db_session, db_engine):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from intelligence.summarizer import fetch_recent_signals
+    from memory.database import Signal
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        s.add(Signal(
+            ticker="NVDA", signal_type="bullish", confidence=0.9,
+            source_agent="financial_analyst", grade_short="A", composite_score=55.0,
+        ))
+        await s.commit()
+
+    signals = await fetch_recent_signals(hours=6)
+    nvda = next(sig for sig in signals if sig["ticker"] == "NVDA")
+    assert nvda["grade_short"] == "A"
+    assert nvda["composite_score"] == 55.0
+
+
 async def test_fetch_recent_articles_returns_recent_only(db_session, db_engine):
     from datetime import UTC, datetime, timedelta
 
