@@ -15,7 +15,7 @@ import sys
 async def run(hours: int, dry_run: bool) -> None:
     from config.settings import get_settings
     from intelligence.discord_notifier import send_digest_embed
-    from intelligence.summarizer import build_digest
+    from intelligence.summarizer import HeartbeatDecision, build_digest, should_notify
 
     settings = get_settings()
     backend = f"Ollama ({settings.local_model})" if settings.use_local_llm else "Claude"
@@ -38,6 +38,11 @@ async def run(hours: int, dry_run: bool) -> None:
 
     if dry_run:
         print("\n[dry-run] Discord post skipped.")
+        return
+
+    decision, reason = should_notify(count, signals, risk)
+    if decision is HeartbeatDecision.SKIP:
+        print(f"\n[heartbeat] Digest not actionable ({reason}) — Discord post skipped.")
         return
 
     print("\nPosting to Discord...")
