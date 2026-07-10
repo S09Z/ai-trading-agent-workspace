@@ -11,37 +11,36 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from memory.database import FactorScore
 
-
 # ── _grade (pure function) ─────────────────────────────────────────────────────
 
 def test_grade_s_at_boundary():
     from intelligence.composite_scorer import _grade
-    assert _grade(70.0) == "S"
+    assert _grade(75.0) == "S"
 
 
 def test_grade_a_just_below_s():
     from intelligence.composite_scorer import _grade
-    assert _grade(69.9) == "A"
+    assert _grade(74.9) == "A"
 
 
 def test_grade_a_at_boundary():
     from intelligence.composite_scorer import _grade
-    assert _grade(50.0) == "A"
+    assert _grade(60.0) == "A"
 
 
 def test_grade_b_just_below_a():
     from intelligence.composite_scorer import _grade
-    assert _grade(49.9) == "B"
+    assert _grade(59.9) == "B"
 
 
 def test_grade_b_at_boundary():
     from intelligence.composite_scorer import _grade
-    assert _grade(30.0) == "B"
+    assert _grade(40.0) == "B"
 
 
 def test_grade_c_just_below_b():
     from intelligence.composite_scorer import _grade
-    assert _grade(29.9) == "C"
+    assert _grade(39.9) == "C"
 
 
 def test_grade_c_at_zero():
@@ -92,8 +91,8 @@ async def test_score_scales_with_ic(db_session, db_engine):
     assert result["grade"] == "S"
 
 
-async def test_reversed_factors_use_abs_ic(db_session, db_engine):
-    """Reversed factors (negative IC) should still contribute via |IC|."""
+async def test_reversed_factors_penalize_score(db_session, db_engine):
+    """Reversed factors (negative IC) penalize the score via signed IC."""
     from intelligence.composite_scorer import compute_composite
     await _seed_factors(db_engine, "TSLA", [
         {"name": "ret_1m",  "bucket": "momentum", "ic": -0.08, "status": "reversed"},
@@ -102,14 +101,15 @@ async def test_reversed_factors_use_abs_ic(db_session, db_engine):
         {"name": "ret_12m", "bucket": "momentum", "ic": -0.08, "status": "reversed"},
     ])
     result = await compute_composite("TSLA")
-    # Only momentum bucket → composite = 80.0 (0.08 × 1000 = 80)
-    assert result["score"] == pytest.approx(80.0)
-    assert result["grade"] == "S"
+    # Only momentum bucket → mean(IC) = -0.08 → -80, clamped to 0
+    assert result["score"] == pytest.approx(0.0)
+    assert result["grade"] == "C"
     assert "momentum" in result["breakdown"]
+    assert result["breakdown"]["momentum"] == pytest.approx(0.0)
 
 
 async def test_dead_factors_lower_score(db_session, db_engine):
-    """Dead factors (low |IC|) drag the bucket score down."""
+    """Dead factors (zero IC) drag the bucket score down via signed IC."""
     from intelligence.composite_scorer import compute_composite
     await _seed_factors(db_engine, "MSFT", [
         {"name": "ret_1m",  "bucket": "momentum", "ic": 0.10, "status": "alive"},
@@ -118,7 +118,7 @@ async def test_dead_factors_lower_score(db_session, db_engine):
         {"name": "ret_12m", "bucket": "momentum", "ic": 0.00, "status": "dead"},
     ])
     result = await compute_composite("MSFT")
-    # mean |IC| = (0.10+0+0+0)/4 = 0.025 → 25 pts → grade C
+    # mean(IC) = (0.10+0+0+0)/4 = 0.025 → 25 pts → grade C
     assert result["score"] == pytest.approx(25.0)
     assert result["grade"] == "C"
 

@@ -9,10 +9,10 @@ from memory.database import AsyncSessionLocal, FactorScore
 _IC_SCALE = 1000.0
 
 _GRADE_THRESHOLDS: tuple[tuple[str, float], ...] = (
-    ("S", 70.0),
-    ("A", 50.0),
-    ("B", 30.0),
-    ("C",  0.0),
+    ("S", 75.0),   # S-grade: strong positive composite (mean IC > 0.075 across buckets)
+    ("A", 60.0),   # A-grade: solid positive (mean IC > 0.060)
+    ("B", 40.0),   # B-grade: modest positive (mean IC > 0.040)
+    ("C",  0.0),   # C-grade: neutral or negative
 )
 
 
@@ -26,8 +26,9 @@ def _grade(score: float) -> str:
 async def compute_composite(ticker: str) -> dict:
     """Aggregate FactorScore rows into a 0–100 composite score + S/A/B/C grade.
 
-    Bucket score = mean |IC| × 1000 (dead factors drag naturally via low |IC|).
-    Composite = mean of bucket scores, capped at 100.
+    Bucket score = mean(signed IC) × 1000. Reversed factors (negative IC) penalize.
+    Composite = mean of bucket scores, clamped to [0, 100].
+    Raised entry threshold: S ≥ 75, A ≥ 60, B ≥ 40, C ≥ 0.
 
     Returns {"score": 0.0, "grade": "C", "breakdown": {}} when no data exists.
     """
@@ -45,7 +46,7 @@ async def compute_composite(ticker: str) -> dict:
             by_bucket[row.bucket].append(row)
 
     bucket_scores: dict[str, float] = {
-        bucket: sum(abs(r.ic) for r in bucket_rows) / len(bucket_rows) * _IC_SCALE
+        bucket: sum(r.ic for r in bucket_rows) / len(bucket_rows) * _IC_SCALE
         for bucket, bucket_rows in by_bucket.items()
         if bucket_rows
     }
@@ -53,7 +54,7 @@ async def compute_composite(ticker: str) -> dict:
     if not bucket_scores:
         return {"score": 0.0, "grade": "C", "breakdown": {}}
 
-    composite = min(100.0, sum(bucket_scores.values()) / len(bucket_scores))
+    composite = max(0.0, min(100.0, sum(bucket_scores.values()) / len(bucket_scores)))
     breakdown = {k: round(v, 1) for k, v in bucket_scores.items()}
 
     return {"score": round(composite, 1), "grade": _grade(composite), "breakdown": breakdown}
