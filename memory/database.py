@@ -2,7 +2,18 @@ import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.ext.asyncio import AsyncAttrs, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import NullPool
@@ -110,6 +121,27 @@ class FactorScore(Base):
     bucket: Mapped[str] = mapped_column(String(20))  # momentum/value/quality/liquidity/volatility
     ic: Mapped[float] = mapped_column(Float)            # Spearman IC vs 5d forward return
     status: Mapped[str] = mapped_column(String(10))     # alive | reversed | dead
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
+
+
+class SMCEdgeStat(Base):
+    """Event-study edge for one SMC pattern/bias/interval — refreshed by make smc-validate."""
+
+    __tablename__ = "smc_edge_stats"
+
+    __table_args__ = (
+        UniqueConstraint("pattern", "bias", "interval", name="uq_smc_edge_pattern_bias_interval"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pattern: Mapped[str] = mapped_column(String(20))   # fvg | order_block | liquidity_sweep
+    bias: Mapped[str] = mapped_column(String(10))      # bullish | bearish
+    interval: Mapped[str] = mapped_column(String(10))  # 1d | 1h | ...
+    sample_size: Mapped[int] = mapped_column(Integer)
+    mean_fwd_return: Mapped[float] = mapped_column(Float)  # mean bias-sign-adjusted N-bar return
+    hit_rate: Mapped[float] = mapped_column(Float)         # fraction with adjusted return > 0
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
