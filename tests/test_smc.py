@@ -71,3 +71,33 @@ def test_bullish_order_block_detected():
 def test_no_order_block_without_impulse():
     df = _mk_df(_flat_rows(20))
     assert detect_order_block(df, impulse_atr_mult=1.5) == []
+
+
+from agents.smc import detect_liquidity_sweep
+
+
+def test_bearish_liquidity_sweep_detected():
+    # prior 3-bar swing high = 11.0; bar wicks to 11.5 but closes back below at 10.8
+    rows = [
+        {"Open": 10.0, "High": 10.8, "Low": 9.9,  "Close": 10.5, "Volume": 1_000},
+        {"Open": 10.5, "High": 11.0, "Low": 10.2, "Close": 10.7, "Volume": 1_000},
+        {"Open": 10.7, "High": 10.9, "Low": 10.3, "Close": 10.6, "Volume": 1_000},
+        {"Open": 10.6, "High": 11.5, "Low": 10.4, "Close": 10.8, "Volume": 2_000},  # sweep
+    ]
+    df = _mk_df(rows)
+    dets = detect_liquidity_sweep(df, swing_lookback=3)
+    assert len(dets) == 1
+    d = dets[0]
+    assert d.pattern == "liquidity_sweep" and d.bias == "bearish" and d.bar_index == 3
+    assert d.zone_low == 11.0 and d.zone_high == 11.0     # swept level
+
+
+def test_no_sweep_when_close_holds_breakout():
+    rows = [
+        {"Open": 10.0, "High": 10.8, "Low": 9.9,  "Close": 10.5, "Volume": 1_000},
+        {"Open": 10.5, "High": 11.0, "Low": 10.2, "Close": 10.7, "Volume": 1_000},
+        {"Open": 10.7, "High": 10.9, "Low": 10.3, "Close": 10.6, "Volume": 1_000},
+        {"Open": 10.6, "High": 11.5, "Low": 10.4, "Close": 11.4, "Volume": 2_000},  # closes above
+    ]
+    df = _mk_df(rows)
+    assert detect_liquidity_sweep(df, swing_lookback=3) == []

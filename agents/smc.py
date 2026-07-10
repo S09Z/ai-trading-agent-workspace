@@ -69,3 +69,25 @@ def detect_order_block(df: pd.DataFrame, impulse_atr_mult: float) -> list[SMCDet
             out.append(SMCDetection("order_block", "bearish", ob, ts,
                                     float(low[ob]), float(high[ob]), float(-body / atr[i])))
     return out
+
+
+def detect_liquidity_sweep(df: pd.DataFrame, swing_lookback: int) -> list[SMCDetection]:
+    """Wick beyond the prior `swing_lookback`-bar high/low that closes back inside.
+
+    strength = wick overshoot / ATR14.
+    """
+    high, low, close = df["High"].to_numpy(), df["Low"].to_numpy(), df["Close"].to_numpy()
+    atr = _atr(df).to_numpy()
+    out: list[SMCDetection] = []
+    for i in range(swing_lookback, len(df)):
+        prior_high = float(high[i - swing_lookback:i].max())
+        prior_low = float(low[i - swing_lookback:i].min())
+        denom = atr[i] if not pd.isna(atr[i]) and atr[i] > 0 else 1.0
+        ts = df.index[i].to_pydatetime()
+        if high[i] > prior_high and close[i] < prior_high:      # buy-side liquidity swept
+            out.append(SMCDetection("liquidity_sweep", "bearish", i, ts,
+                                    prior_high, prior_high, float((high[i] - prior_high) / denom)))
+        elif low[i] < prior_low and close[i] > prior_low:       # sell-side liquidity swept
+            out.append(SMCDetection("liquidity_sweep", "bullish", i, ts,
+                                    prior_low, prior_low, float((prior_low - low[i]) / denom)))
+    return out
