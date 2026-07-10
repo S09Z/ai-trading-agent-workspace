@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial discover status test test-cov lint fmt check clean reset deploy deploy-ci ssl-init ssl-renew monitoring
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial discover backtest status test test-cov lint fmt check clean reset deploy deploy-ci ssl-init ssl-renew monitoring
 
 UV      := uv run
 COMPOSE := docker compose
@@ -95,6 +95,9 @@ financial: ## Run FinancialAnalystAgent — analyze financials for all watchlist
 
 discover: ## Run DiscoveryAgent — find universe tickers with strong news mentions outside watchlist
 	$(UV) python -c "import asyncio; from agents.discovery_agent import DiscoveryAgent; asyncio.run(DiscoveryAgent().run())"
+
+backtest: ## Run walk-forward backtest on watchlist tickers
+	$(UV) python -m backtesting.engine
 
 sentiment: ## Run SentimentAnalyst on unanalysed articles
 	$(UV) python -c "import asyncio; from agents.sentiment_analyst import SentimentAnalystAgent; asyncio.run(SentimentAnalystAgent().run())"

@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     api_port: int = 8000
     debug: bool = False
 
+    # ── Walk-forward backtest ──────────────────────────────────────────────────
+    backtest_train_days: int = 252    # 1 trading year training window
+    backtest_test_days: int = 63      # ~1 quarter test window
+    backtest_hold_days: int = 5       # exit after N days (matches SignalOutcome 5d)
+    backtest_entry_score: float = 50.0  # composite score threshold (grade A/S)
+
 
 @lru_cache
 def get_settings() -> Settings:
