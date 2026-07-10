@@ -36,3 +36,36 @@ def detect_fvg(df: pd.DataFrame) -> list[SMCDetection]:
             out.append(SMCDetection("fvg", "bearish", i, ts,
                                     float(high[i]), float(low[i - 2]), float(gap / close[i])))
     return out
+
+
+def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Average True Range over `period` bars."""
+    high, low, close = df["High"], df["Low"], df["Close"]
+    prev_close = close.shift(1)
+    tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+    return tr.rolling(period).mean()
+
+
+def detect_order_block(df: pd.DataFrame, impulse_atr_mult: float) -> list[SMCDetection]:
+    """Last opposing candle before an impulsive displacement (> mult × ATR14).
+
+    Fires on the order-block candle (bar before the impulse). strength = body / ATR14.
+    """
+    o, c = df["Open"].to_numpy(), df["Close"].to_numpy()
+    high, low = df["High"].to_numpy(), df["Low"].to_numpy()
+    atr = _atr(df).to_numpy()
+    out: list[SMCDetection] = []
+    for i in range(1, len(df)):
+        if pd.isna(atr[i]) or atr[i] <= 0:
+            continue
+        body = c[i] - o[i]
+        threshold = impulse_atr_mult * atr[i]
+        ob = i - 1
+        ts = df.index[ob].to_pydatetime()
+        if body > threshold and c[ob] < o[ob]:        # impulse up after a down candle
+            out.append(SMCDetection("order_block", "bullish", ob, ts,
+                                    float(low[ob]), float(high[ob]), float(body / atr[i])))
+        elif body < -threshold and c[ob] > o[ob]:      # impulse down after an up candle
+            out.append(SMCDetection("order_block", "bearish", ob, ts,
+                                    float(low[ob]), float(high[ob]), float(-body / atr[i])))
+    return out

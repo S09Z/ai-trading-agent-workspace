@@ -44,3 +44,30 @@ def test_no_fvg_when_no_gap():
         {"Open": 10.2, "High": 10.7, "Low": 9.7, "Close": 10.3, "Volume": 1_000},
     ])
     assert detect_fvg(df) == []
+
+
+from agents.smc import detect_order_block
+
+
+def _flat_rows(n: int, price: float = 10.0) -> list[dict]:
+    # small-range candles so ATR14 is small and the impulse stands out
+    return [{"Open": price, "High": price + 0.1, "Low": price - 0.1,
+             "Close": price, "Volume": 1_000} for _ in range(n)]
+
+
+def test_bullish_order_block_detected():
+    rows = _flat_rows(15)                       # warm up ATR14
+    rows.append({"Open": 10.0, "High": 10.05, "Low": 9.7, "Close": 9.75, "Volume": 1_000})  # down candle (OB)
+    rows.append({"Open": 9.8, "High": 12.0, "Low": 9.8, "Close": 11.9, "Volume": 3_000})   # impulse up
+    df = _mk_df(rows)
+    dets = detect_order_block(df, impulse_atr_mult=1.5)
+    assert len(dets) == 1
+    d = dets[0]
+    assert d.pattern == "order_block" and d.bias == "bullish"
+    assert d.bar_index == 15                    # the down candle before the impulse
+    assert d.zone_low == 9.7 and d.zone_high == 10.05
+
+
+def test_no_order_block_without_impulse():
+    df = _mk_df(_flat_rows(20))
+    assert detect_order_block(df, impulse_atr_mult=1.5) == []
