@@ -91,3 +91,12 @@ def detect_liquidity_sweep(df: pd.DataFrame, swing_lookback: int) -> list[SMCDet
             out.append(SMCDetection("liquidity_sweep", "bullish", i, ts,
                                     prior_low, prior_low, float((prior_low - low[i]) / denom)))
     return out
+
+
+def detect_all(df: pd.DataFrame, *, impulse_atr_mult: float, swing_lookback: int) -> list[SMCDetection]:
+    """Run all three detectors and return the combined detections."""
+    return (
+        detect_fvg(df)
+        + detect_order_block(df, impulse_atr_mult)
+        + detect_liquidity_sweep(df, swing_lookback)
+    )

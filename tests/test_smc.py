@@ -101,3 +101,18 @@ def test_no_sweep_when_close_holds_breakout():
     ]
     df = _mk_df(rows)
     assert detect_liquidity_sweep(df, swing_lookback=3) == []
+
+
+from agents.smc import detect_all
+
+
+def test_detect_all_combines_detectors():
+    df = _mk_df([
+        {"Open": 10.0, "High": 10.5, "Low": 9.5,  "Close": 10.0, "Volume": 1_000},
+        {"Open": 10.5, "High": 12.0, "Low": 10.4, "Close": 11.8, "Volume": 2_000},
+        {"Open": 11.9, "High": 12.5, "Low": 10.8, "Close": 12.2, "Volume": 1_500},
+    ])
+    dets = detect_all(df, impulse_atr_mult=1.5, swing_lookback=5)
+    patterns = {d.pattern for d in dets}
+    assert "fvg" in patterns                       # the bullish FVG from Task 2
+    assert all(isinstance(d, SMCDetection) for d in dets)
