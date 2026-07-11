@@ -2,7 +2,13 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 
-from agents.smc import SMCDetection, detect_fvg
+from agents.smc import (
+    SMCDetection,
+    detect_all,
+    detect_fvg,
+    detect_liquidity_sweep,
+    detect_order_block,
+)
 
 
 def _mk_df(rows: list[dict]) -> pd.DataFrame:
@@ -46,9 +52,6 @@ def test_no_fvg_when_no_gap():
     assert detect_fvg(df) == []
 
 
-from agents.smc import detect_order_block
-
-
 def _flat_rows(n: int, price: float = 10.0) -> list[dict]:
     # small-range candles so ATR14 is small and the impulse stands out
     return [{"Open": price, "High": price + 0.1, "Low": price - 0.1,
@@ -57,8 +60,10 @@ def _flat_rows(n: int, price: float = 10.0) -> list[dict]:
 
 def test_bullish_order_block_detected():
     rows = _flat_rows(15)                       # warm up ATR14
-    rows.append({"Open": 10.0, "High": 10.05, "Low": 9.7, "Close": 9.75, "Volume": 1_000})  # down candle (OB)
-    rows.append({"Open": 9.8, "High": 12.0, "Low": 9.8, "Close": 11.9, "Volume": 3_000})   # impulse up
+    # down candle (OB)
+    rows.append({"Open": 10.0, "High": 10.05, "Low": 9.7, "Close": 9.75, "Volume": 1_000})
+    # impulse up
+    rows.append({"Open": 9.8, "High": 12.0, "Low": 9.8, "Close": 11.9, "Volume": 3_000})
     df = _mk_df(rows)
     dets = detect_order_block(df, impulse_atr_mult=1.5)
     assert len(dets) == 1
@@ -73,7 +78,19 @@ def test_no_order_block_without_impulse():
     assert detect_order_block(df, impulse_atr_mult=1.5) == []
 
 
-from agents.smc import detect_liquidity_sweep
+def test_bearish_order_block_detected():
+    rows = _flat_rows(15)                       # warm up ATR14
+    # up candle (OB)
+    rows.append({"Open": 10.0, "High": 10.3, "Low": 9.95, "Close": 10.25, "Volume": 1_000})
+    # impulse down
+    rows.append({"Open": 10.2, "High": 10.2, "Low": 8.0, "Close": 8.1, "Volume": 3_000})
+    df = _mk_df(rows)
+    dets = detect_order_block(df, impulse_atr_mult=1.5)
+    assert len(dets) == 1
+    d = dets[0]
+    assert d.pattern == "order_block" and d.bias == "bearish"
+    assert d.bar_index == 15                    # the up candle before the impulse
+    assert d.zone_low == 9.95 and d.zone_high == 10.3
 
 
 def test_bearish_liquidity_sweep_detected():
@@ -103,7 +120,36 @@ def test_no_sweep_when_close_holds_breakout():
     assert detect_liquidity_sweep(df, swing_lookback=3) == []
 
 
-from agents.smc import detect_all
+def test_bullish_liquidity_sweep_detected():
+    # prior 3-bar swing low = 10.0; bar wicks to 9.5 but closes back above at 10.2
+    rows = [
+        {"Open": 10.5, "High": 10.8, "Low": 10.2, "Close": 10.5, "Volume": 1_000},
+        {"Open": 10.4, "High": 10.6, "Low": 10.0, "Close": 10.3, "Volume": 1_000},
+        {"Open": 10.3, "High": 10.5, "Low": 10.1, "Close": 10.4, "Volume": 1_000},
+        {"Open": 10.4, "High": 10.6, "Low": 9.5,  "Close": 10.2, "Volume": 2_000},  # sweep
+    ]
+    df = _mk_df(rows)
+    dets = detect_liquidity_sweep(df, swing_lookback=3)
+    assert len(dets) == 1
+    d = dets[0]
+    assert d.pattern == "liquidity_sweep" and d.bias == "bullish" and d.bar_index == 3
+    assert d.zone_low == 10.0 and d.zone_high == 10.0     # swept level
+
+
+def test_outside_bar_sweeps_both_sides():
+    # prior 3-bar high = 11.0, low = 10.0; final bar wicks beyond both but
+    # closes back inside (below 11.0 and above 10.0) → both sweeps fire.
+    rows = [
+        {"Open": 10.5, "High": 10.8, "Low": 10.2, "Close": 10.5, "Volume": 1_000},
+        {"Open": 10.5, "High": 11.0, "Low": 10.0, "Close": 10.7, "Volume": 1_000},
+        {"Open": 10.7, "High": 10.9, "Low": 10.3, "Close": 10.6, "Volume": 1_000},
+        {"Open": 10.6, "High": 11.5, "Low": 9.5,  "Close": 10.5, "Volume": 2_000},  # outside bar
+    ]
+    df = _mk_df(rows)
+    dets = detect_liquidity_sweep(df, swing_lookback=3)
+    biases = {d.bias for d in dets}
+    assert biases == {"bearish", "bullish"}
+    assert all(d.bar_index == 3 for d in dets)
 
 
 def test_detect_all_combines_detectors():

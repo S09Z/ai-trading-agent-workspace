@@ -29,12 +29,14 @@ def detect_fvg(df: pd.DataFrame) -> list[SMCDetection]:
         ts = df.index[i].to_pydatetime()
         if low[i] > high[i - 2]:  # bullish gap
             gap = low[i] - high[i - 2]
+            strength = float(gap / close[i]) if close[i] != 0.0 else float("nan")
             out.append(SMCDetection("fvg", "bullish", i, ts,
-                                    float(high[i - 2]), float(low[i]), float(gap / close[i])))
+                                    float(high[i - 2]), float(low[i]), strength))
         elif high[i] < low[i - 2]:  # bearish gap
             gap = low[i - 2] - high[i]
+            strength = float(gap / close[i]) if close[i] != 0.0 else float("nan")
             out.append(SMCDetection("fvg", "bearish", i, ts,
-                                    float(high[i]), float(low[i - 2]), float(gap / close[i])))
+                                    float(high[i]), float(low[i - 2]), strength))
     return out
 
 
@@ -42,7 +44,9 @@ def _atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Average True Range over `period` bars."""
     high, low, close = df["High"], df["Low"], df["Close"]
     prev_close = close.shift(1)
-    tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+    tr = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1
+    ).max(axis=1)
     return tr.rolling(period).mean()
 
 
@@ -87,13 +91,15 @@ def detect_liquidity_sweep(df: pd.DataFrame, swing_lookback: int) -> list[SMCDet
         if high[i] > prior_high and close[i] < prior_high:      # buy-side liquidity swept
             out.append(SMCDetection("liquidity_sweep", "bearish", i, ts,
                                     prior_high, prior_high, float((high[i] - prior_high) / denom)))
-        elif low[i] < prior_low and close[i] > prior_low:       # sell-side liquidity swept
+        if low[i] < prior_low and close[i] > prior_low:         # sell-side liquidity swept
             out.append(SMCDetection("liquidity_sweep", "bullish", i, ts,
                                     prior_low, prior_low, float((prior_low - low[i]) / denom)))
     return out
 
 
-def detect_all(df: pd.DataFrame, *, impulse_atr_mult: float, swing_lookback: int) -> list[SMCDetection]:
+def detect_all(
+    df: pd.DataFrame, *, impulse_atr_mult: float, swing_lookback: int
+) -> list[SMCDetection]:
     """Run all three detectors and return the combined detections."""
     return (
         detect_fvg(df)
