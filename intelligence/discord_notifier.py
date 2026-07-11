@@ -42,6 +42,14 @@ async def send_message(content: str) -> None:
 _SIGNAL_ICONS = {"bullish": "🟢", "bearish": "🔴", "watchlist": "🔬", "alert": "⚠️"}
 
 
+def _score_suffix(s: dict) -> str:
+    score = s.get("composite_score")
+    if score is None:
+        return ""
+    grade = s.get("grade_short")
+    return f" · {grade}/{int(score)}" if grade else f" · {int(score)}"
+
+
 def _format_intelligence_section(
     signals: list[dict] | None,
     risk: dict | None,
@@ -52,6 +60,7 @@ def _format_intelligence_section(
     if sentiment:
         parts = [
             f"{s['ticker']} {_SIGNAL_ICONS[s['signal_type']]} {s['confidence']:.2f}"
+            f"{_score_suffix(s)}"
             for s in sentiment[:5]
         ]
         lines.append("**🧠 Agent Intelligence**")
@@ -66,7 +75,11 @@ def _format_intelligence_section(
             lines.append("**🧠 Agent Intelligence**")
         lines.append(f"🔬 {research['ticker']}: {research['rationale'][:200]}")
 
-    if risk and (risk.get("spike_count", 0) > 0 or risk.get("circuit_open") or risk.get("alert_count", 0) > 0):
+    if risk and (
+        risk.get("spike_count", 0) > 0
+        or risk.get("circuit_open")
+        or risk.get("alert_count", 0) > 0
+    ):
         circuit = "🔴 OPEN" if risk.get("circuit_open") else "🟢 CLOSED"
         if not lines:
             lines.append("**🧠 Agent Intelligence**")

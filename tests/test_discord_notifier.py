@@ -148,7 +148,8 @@ def test_format_intelligence_section_empty_when_no_data():
     from intelligence.discord_notifier import _format_intelligence_section
 
     assert _format_intelligence_section(None, None) == ""
-    assert _format_intelligence_section([], {"spike_count": 0, "circuit_open": False, "alert_count": 0}) == ""
+    empty_risk = {"spike_count": 0, "circuit_open": False, "alert_count": 0}
+    assert _format_intelligence_section([], empty_risk) == ""
 
 
 def test_format_intelligence_section_shows_sentiment_signals():
@@ -169,7 +170,8 @@ def test_format_intelligence_section_shows_research():
     from intelligence.discord_notifier import _format_intelligence_section
 
     signals = [
-        {"ticker": "NVDA", "signal_type": "watchlist", "confidence": 0.5, "rationale": "Strong thesis here."},
+        {"ticker": "NVDA", "signal_type": "watchlist", "confidence": 0.5,
+         "rationale": "Strong thesis here."},
     ]
     result = _format_intelligence_section(signals, None)
     assert "🔬" in result
@@ -192,6 +194,30 @@ def test_format_intelligence_section_circuit_open():
     risk = {"spike_count": 0, "circuit_open": True, "alert_count": 0}
     result = _format_intelligence_section([], risk)
     assert "🔴 OPEN" in result
+
+
+def test_format_includes_composite_score_when_present():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    signals = [
+        {"ticker": "NVDA", "signal_type": "bullish", "confidence": 0.82,
+         "rationale": None, "grade_short": "S", "composite_score": 72.0},
+    ]
+    result = _format_intelligence_section(signals, None)
+    assert "NVDA" in result
+    assert "S/72" in result
+
+
+def test_format_omits_score_suffix_when_none():
+    from intelligence.discord_notifier import _format_intelligence_section
+
+    signals = [
+        {"ticker": "AAPL", "signal_type": "bullish", "confidence": 0.82,
+         "rationale": None, "grade_short": None, "composite_score": None},
+    ]
+    result = _format_intelligence_section(signals, None)
+    assert "AAPL" in result
+    assert "/" not in result
 
 
 async def test_send_digest_embed_includes_intelligence_section(discord_mock):

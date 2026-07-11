@@ -105,7 +105,9 @@ async def test_run_creates_bullish_signal(db_session, db_engine):
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         sig = (await s.execute(
-            select(Signal).where(Signal.ticker == "AAPL", Signal.source_agent == "financial_analyst")
+            select(Signal).where(
+                Signal.ticker == "AAPL", Signal.source_agent == "financial_analyst"
+            )
         )).scalars().first()
 
     assert sig is not None
@@ -128,7 +130,9 @@ async def test_run_creates_bearish_signal(db_session, db_engine):
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
         sig = (await s.execute(
-            select(Signal).where(Signal.ticker == "TSLA", Signal.source_agent == "financial_analyst")
+            select(Signal).where(
+                Signal.ticker == "TSLA", Signal.source_agent == "financial_analyst"
+            )
         )).scalars().first()
 
     assert sig.signal_type == "bearish"

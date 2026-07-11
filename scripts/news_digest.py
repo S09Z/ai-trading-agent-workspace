@@ -15,7 +15,7 @@ import sys
 async def run(hours: int, dry_run: bool) -> None:
     from config.settings import get_settings
     from intelligence.discord_notifier import send_digest_embed
-    from intelligence.summarizer import build_digest
+    from intelligence.summarizer import HeartbeatDecision, build_digest, should_notify
 
     settings = get_settings()
     backend = f"Ollama ({settings.local_model})" if settings.use_local_llm else "Claude"
@@ -27,7 +27,10 @@ async def run(hours: int, dry_run: bool) -> None:
         print("Nothing to summarise. Run 'make start' to verify DB, then let NewsHunter collect.")
         return
 
-    print(f"Found {count} article(s), {len(signals)} signal(s). Generating digest with {backend}...\n")
+    print(
+        f"Found {count} article(s), {len(signals)} signal(s). "
+        f"Generating digest with {backend}...\n"
+    )
 
     print("─" * 60)
     print(digest)
@@ -37,9 +40,16 @@ async def run(hours: int, dry_run: bool) -> None:
         print("\n[dry-run] Discord post skipped.")
         return
 
+    decision, reason = should_notify(count, signals, risk)
+    if decision is HeartbeatDecision.SKIP:
+        print(f"\n[heartbeat] Digest not actionable ({reason}) — Discord post skipped.")
+        return
+
     print("\nPosting to Discord...")
     try:
-        await send_digest_embed(digest, article_count=count, hours=hours, signals=signals, risk=risk)
+        await send_digest_embed(
+            digest, article_count=count, hours=hours, signals=signals, risk=risk
+        )
         print("✓ Posted successfully.")
     except ValueError as exc:
         print(f"✗ {exc}")

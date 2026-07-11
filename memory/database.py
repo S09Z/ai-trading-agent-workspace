@@ -60,7 +60,7 @@ class Signal(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticker: Mapped[str] = mapped_column(String(20), index=True)
-    signal_type: Mapped[str] = mapped_column(String(20))        # bullish | bearish | alert | watchlist
+    signal_type: Mapped[str] = mapped_column(String(20))        # bullish/bearish/alert/watchlist
     confidence: Mapped[float] = mapped_column(Float)            # 0.0 – 1.0
     source_agent: Mapped[str] = mapped_column(String(50))
     rationale: Mapped[str | None] = mapped_column(Text)
@@ -107,7 +107,7 @@ class FactorScore(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ticker: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(50))       # "ret_3m", "realized_vol_20d", ...
-    bucket: Mapped[str] = mapped_column(String(20))     # momentum | value | quality | liquidity | volatility
+    bucket: Mapped[str] = mapped_column(String(20))  # momentum/value/quality/liquidity/volatility
     ic: Mapped[float] = mapped_column(Float)            # Spearman IC vs 5d forward return
     status: Mapped[str] = mapped_column(String(10))     # alive | reversed | dead
     computed_at: Mapped[datetime] = mapped_column(

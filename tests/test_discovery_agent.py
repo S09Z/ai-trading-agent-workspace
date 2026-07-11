@@ -113,11 +113,7 @@ async def test_run_creates_signal_for_candidate(db_session, db_engine):
     with patch("agents.discovery_agent._fetch_price", return_value=_MOCK_SNAP), \
          patch("agents.discovery_agent._settings") as s:
         s.watchlist = ["AAPL", "TSLA"]
-        s.use_local_llm = False
-        with patch(
-            "intelligence.claude_client.analyze",
-            new=AsyncMock(return_value=_BULLISH_RESPONSE),
-        ):
+        with patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
             await DiscoveryAgent().run()
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
@@ -268,11 +264,7 @@ async def test_run_writes_agent_log(db_session, db_engine):
     with patch("agents.discovery_agent._fetch_price", return_value=_MOCK_SNAP), \
          patch("agents.discovery_agent._settings") as s:
         s.watchlist = ["AAPL"]
-        s.use_local_llm = False
-        with patch(
-            "intelligence.claude_client.analyze",
-            new=AsyncMock(return_value=_BULLISH_RESPONSE),
-        ):
+        with patch("intelligence.llm.analyze", new=AsyncMock(return_value=_BULLISH_RESPONSE)):
             await DiscoveryAgent().run()
 
     async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:

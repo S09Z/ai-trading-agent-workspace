@@ -159,3 +159,6 @@ USE_LOCAL_LLM=false  # use Claude API (default)
 - [x] Celery Beat — `run_discovery_agent` task added (every 6h, aligned with digest)
 - [x] `make discover` — run DiscoveryAgent manually
 - [x] 13 tests in `tests/test_discovery_agent.py`, 197 total passing
+
+
+# Mark

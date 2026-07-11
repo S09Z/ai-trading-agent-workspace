@@ -14,7 +14,9 @@ _DIGEST_CHANNEL_ID = "111111111111111111"
 _BOT_CHANNEL_ID = "222222222222222222"
 
 # Simulates a live Celery worker responding to ping
-_MOCK_PING = patch("scheduler.tasks.celery_app.control.ping", return_value=[{"worker@host": {"ok": "pong"}}])
+_MOCK_PING = patch(
+    "scheduler.tasks.celery_app.control.ping", return_value=[{"worker@host": {"ok": "pong"}}]
+)
 
 
 def _make_settings(
@@ -237,7 +239,9 @@ async def test_cmd_status_includes_all_agents():
     await cmd_status(ctx)
 
     reply = ctx.reply.call_args.args[0]
-    for agent in ("NewsHunter", "MarketWatch", "SentimentAnalyst", "RiskMonitor", "ResearchAnalyst", "Digest"):
+    for agent in (
+        "NewsHunter", "MarketWatch", "SentimentAnalyst", "RiskMonitor", "ResearchAnalyst", "Digest"
+    ):
         assert agent in reply, f"Expected '{agent}' in status reply"
 
 
