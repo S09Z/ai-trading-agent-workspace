@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial discover backtest status test test-cov lint fmt check clean reset deploy deploy-ci ssl-init ssl-renew monitoring
+.PHONY: help install up down restart logs ps start cockpit frontend discord-bot celery-worker celery-beat pm2-start pm2-stop pm2-restart pm2-status pm2-logs cycle sentiment digest digest-dry memory financial discover backtest smc-validate status test test-cov lint fmt check clean reset deploy deploy-ci ssl-init ssl-renew monitoring
 
 UV      := uv run
 COMPOSE := docker compose
@@ -98,6 +98,9 @@ discover: ## Run DiscoveryAgent — find universe tickers with strong news menti
 
 backtest: ## Run walk-forward backtest on watchlist tickers
 	$(UV) python -m backtesting.engine
+
+smc-validate: ## Run SMC event-study validation and refresh edge stats
+	$(UV) python -m backtesting.smc_validation
 
 sentiment: ## Run SentimentAnalyst on unanalysed articles
 	$(UV) python -c "import asyncio; from agents.sentiment_analyst import SentimentAnalystAgent; asyncio.run(SentimentAnalystAgent().run())"
