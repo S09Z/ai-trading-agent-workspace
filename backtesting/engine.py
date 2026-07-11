@@ -2,7 +2,7 @@
 
 For each rolling window: compute factor ICs on the training slice only
 (no lookahead), derive the composite score exactly as the live scorer does
-(mean |IC| per bucket × 1000, capped at 100), and enter a long trade at the
+(mean(signed IC) per bucket × 1000, clamped to [0, 100]), and enter a long trade at the
 first test-window close when the score clears the entry threshold.
 
 Run: uv run python -m backtesting.engine [--tickers AAPL NVDA] [--hold-days N]
@@ -28,15 +28,16 @@ def _train_ics(prices: pd.DataFrame) -> dict[str, float]:
 
 
 def _composite_from_ics(ics: dict[str, float]) -> float:
-    """Replicate compute_composite() scoring without DB reads."""
+    """Replicate compute_composite() scoring without DB reads (uses signed IC)."""
     bucket_scores = []
     for factors in ALPHA_BUCKETS.values():
-        vals = [abs(ics[f]) for f in factors if f in ics]
+        vals = [ics[f] for f in factors if f in ics]
         if vals:
             bucket_scores.append(sum(vals) / len(vals) * _IC_SCALE)
     if not bucket_scores:
         return 0.0
-    return min(100.0, sum(bucket_scores) / len(bucket_scores))
+    composite = sum(bucket_scores) / len(bucket_scores)
+    return max(0.0, min(100.0, composite))
 
 
 def _fetch_prices(ticker: str) -> pd.DataFrame:

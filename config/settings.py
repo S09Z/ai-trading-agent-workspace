@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     backtest_train_days: int = 252    # 1 trading year training window
     backtest_test_days: int = 63      # ~1 quarter test window
     backtest_hold_days: int = 5       # exit after N days (matches SignalOutcome 5d)
-    backtest_entry_score: float = 50.0  # composite score threshold (grade A/S)
+    backtest_entry_score: float = 25.0  # composite score threshold (C+/B-, mean IC > 0.025)
 
 
 @lru_cache
