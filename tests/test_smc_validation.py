@@ -43,3 +43,35 @@ def test_aggregate_computes_mean_and_hitrate():
 
 def test_aggregate_below_min_events_returns_none():
     assert aggregate([0.02, 0.03], min_events=3) is None
+
+
+from datetime import UTC, datetime, timedelta
+
+from backtesting.smc_validation import event_study
+
+
+def _series_df(closes: list[float]) -> pd.DataFrame:
+    idx = [datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=i) for i in range(len(closes))]
+    return pd.DataFrame(
+        {"Open": closes, "High": [c + 0.01 for c in closes],
+         "Low": [c - 0.01 for c in closes], "Close": closes,
+         "Volume": [1_000] * len(closes)},
+        index=pd.DatetimeIndex(idx),
+    )
+
+
+def test_event_study_aggregates_by_pattern_bias():
+    # Craft a bullish FVG then a rising series so its forward return is positive.
+    closes = [10.0, 11.8, 12.2] + [12.2 + 0.5 * i for i in range(1, 8)]
+    df = _series_df(closes)
+    # force a bullish FVG on bar 2 by widening the low/high gap
+    df.loc[df.index[0], "High"] = 10.5
+    df.loc[df.index[2], "Low"] = 10.8
+    stats = event_study(
+        {"TEST": df}, interval="1d", horizon=3, min_events=1,
+        impulse_atr_mult=1.5, swing_lookback=5,
+    )
+    fvg = [s for s in stats if s["pattern"] == "fvg" and s["bias"] == "bullish"]
+    assert fvg and fvg[0]["sample_size"] >= 1
+    assert fvg[0]["mean_fwd_return"] > 0        # bullish FVG preceded a rise
+    assert fvg[0]["interval"] == "1d"
