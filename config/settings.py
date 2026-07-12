@@ -92,6 +92,15 @@ class Settings(BaseSettings):
     backtest_hold_days: int = 5       # exit after N days (matches SignalOutcome 5d)
     backtest_entry_score: float = 25.0  # composite score threshold (C+/B-, mean IC > 0.025)
 
+    # ── SMC (Smart Money Concepts) detection + event-study validation ──────────
+    smc_interval: str = "1d"          # candle interval for detection + validation
+    smc_period: str = "6mo"           # live detection window (used in PR #8b)
+    smc_horizon_days: int = 5         # forward-return horizon for the event study
+    smc_min_events: int = 30          # min detections before an edge stat is trusted
+    smc_swing_lookback: int = 5       # bars each side for liquidity-sweep pivots
+    smc_impulse_atr_mult: float = 1.5  # order-block impulse threshold (× ATR14)
+    smc_fresh_bars: int = 1           # MarketWatch "fresh detection" window (PR #8b)
+
 
 @lru_cache
 def get_settings() -> Settings:
