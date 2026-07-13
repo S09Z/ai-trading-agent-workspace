@@ -37,7 +37,7 @@ async def _check_ticker_smc(ticker: str, edge: dict, s) -> list[dict]:
             "ticker": ticker,
             "pattern": d.pattern,
             "bias": d.bias,
-            "hist_hit_rate": edge.get((d.pattern, d.bias), {}).get("hit_rate") if edge.get((d.pattern, d.bias)) else None,
+            "hist_hit_rate": edge[(d.pattern, d.bias)].hit_rate if (d.pattern, d.bias) in edge else None,
         }
         for d in fresh
     ]
