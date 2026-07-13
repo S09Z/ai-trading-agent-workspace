@@ -150,3 +150,43 @@ async def test_get_smc_context_annotates_with_edge_stats(db_session, db_engine):
     assert "n=142" in result
     assert "57%" in result
     assert "+0.6%" in result
+
+
+# ── Task 2: MarketWatch smc_detected ─────────────────────────────────────────
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_market_watch_logs_smc_detected(db_session, db_engine):
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, patch
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from agents.market_watch import MarketWatchAgent
+    from agents.smc import SMCDetection
+    from memory.database import AgentLog
+
+    ts = datetime(2026, 1, 5, tzinfo=UTC)
+    detection = SMCDetection("fvg", "bullish", 4, ts, 99.0, 101.0, 0.02)
+    candles = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+         "volume": 1000.0, "timestamp": datetime(2026, 1, i + 1, tzinfo=UTC)}
+        for i in range(5)
+    ]
+
+    with (
+        patch("agents.market_watch.fetch_watchlist_snapshots", new=AsyncMock(return_value=[])),
+        patch("agents.market_watch.fetch_ohlcv", new=AsyncMock(return_value=candles)),
+        patch("agents.market_watch.detect_all", return_value=[detection]),
+    ):
+        await MarketWatchAgent().run()
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        logs = (await s.execute(
+            select(AgentLog).where(AgentLog.action == "smc_detected")
+        )).scalars().all()
+
+    assert len(logs) >= 1
+    assert logs[0].meta["pattern"] == "fvg"
+    assert logs[0].meta["bias"] == "bullish"
