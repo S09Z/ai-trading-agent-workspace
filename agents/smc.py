@@ -106,3 +106,60 @@ def detect_all(
         + detect_order_block(df, impulse_atr_mult)
         + detect_liquidity_sweep(df, swing_lookback)
     )
+
+
+_PATTERN_LABELS: dict[str, str] = {
+    "fvg": "FVG",
+    "order_block": "Order Block",
+    "liquidity_sweep": "Liquidity Sweep",
+}
+
+
+async def get_smc_context(ticker: str) -> str:
+    """Format recent SMC detections with historical edge stats as a prompt section.
+
+    Returns empty string if no candles or no detections (graceful fallback for analysts).
+    """
+    from sqlalchemy import select
+
+    from collectors.market_data import fetch_ohlcv
+    from config.settings import get_settings
+    from memory.database import AsyncSessionLocal, SMCEdgeStat
+
+    s = get_settings()
+    candles = await fetch_ohlcv(ticker, period=s.smc_period, interval=s.smc_interval)
+    if not candles:
+        return ""
+
+    df = pd.DataFrame([
+        {"Open": c["open"], "High": c["high"], "Low": c["low"],
+         "Close": c["close"], "Volume": c["volume"]}
+        for c in candles
+    ])
+    df.index = pd.DatetimeIndex([c["timestamp"] for c in candles])
+
+    detections = detect_all(
+        df, impulse_atr_mult=s.smc_impulse_atr_mult, swing_lookback=s.smc_swing_lookback
+    )
+    if not detections:
+        return ""
+
+    async with AsyncSessionLocal() as session:
+        edge_rows = (await session.execute(select(SMCEdgeStat))).scalars().all()
+    edge = {(r.pattern, r.bias): r for r in edge_rows}
+
+    lines = []
+    for d in detections[-10:]:
+        stat = edge.get((d.pattern, d.bias))
+        label = _PATTERN_LABELS.get(d.pattern, d.pattern)
+        date_str = d.timestamp.strftime("%Y-%m-%d")
+        if stat:
+            lines.append(
+                f"  SMC: {d.bias.capitalize()} {label} @ {date_str}"
+                f" (hist: {stat.mean_fwd_return:+.1%} {s.smc_horizon_days}d,"
+                f" {stat.hit_rate:.0%} hit, n={stat.sample_size})"
+            )
+        else:
+            lines.append(f"  SMC: {d.bias.capitalize()} {label} @ {date_str}")
+
+    return "SMC Detections:\n" + "\n".join(lines)

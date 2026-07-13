@@ -75,3 +75,118 @@ def test_event_study_aggregates_by_pattern_bias():
     assert fvg and fvg[0]["sample_size"] >= 1
     assert fvg[0]["mean_fwd_return"] > 0        # bullish FVG preceded a rise
     assert fvg[0]["interval"] == "1d"
+
+
+# ── Task 1 tests: get_smc_context ─────────────────────────────────────────────
+from unittest.mock import AsyncMock, patch
+
+from agents.smc import SMCDetection, get_smc_context
+
+
+async def test_get_smc_context_empty_when_no_candles():
+    with patch("collectors.market_data._fetch_ohlcv", return_value=[]):
+        result = await get_smc_context("AAPL")
+    assert result == ""
+
+
+async def test_get_smc_context_empty_when_no_detections():
+    from datetime import UTC, datetime
+    candles = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+         "volume": 1000.0, "timestamp": datetime(2026, 1, i + 1, tzinfo=UTC)}
+        for i in range(5)
+    ]
+    with patch("collectors.market_data._fetch_ohlcv", return_value=candles), \
+         patch("agents.smc.detect_all", return_value=[]):
+        result = await get_smc_context("AAPL")
+    assert result == ""
+
+
+async def test_get_smc_context_formats_detection_without_edge_stats(db_session):
+    from datetime import UTC, datetime
+    candles = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+         "volume": 1000.0, "timestamp": datetime(2026, 1, i + 1, tzinfo=UTC)}
+        for i in range(5)
+    ]
+    detection = SMCDetection(
+        pattern="fvg", bias="bullish", bar_index=4,
+        timestamp=datetime(2026, 1, 5, tzinfo=UTC),
+        zone_low=99.0, zone_high=101.0, strength=0.02,
+    )
+    with patch("collectors.market_data._fetch_ohlcv", return_value=candles), \
+         patch("agents.smc.detect_all", return_value=[detection]):
+        result = await get_smc_context("AAPL")
+    assert "SMC Detections:" in result
+    assert "Bullish FVG" in result
+    assert "2026-01-05" in result
+
+
+async def test_get_smc_context_annotates_with_edge_stats(db_session, db_engine):
+    from datetime import UTC, datetime
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from memory.database import SMCEdgeStat
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        s.add(SMCEdgeStat(
+            pattern="fvg", bias="bullish", interval="1d",
+            sample_size=142, mean_fwd_return=0.006, hit_rate=0.57,
+        ))
+        await s.commit()
+
+    candles = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+         "volume": 1000.0, "timestamp": datetime(2026, 1, i + 1, tzinfo=UTC)}
+        for i in range(5)
+    ]
+    detection = SMCDetection(
+        pattern="fvg", bias="bullish", bar_index=4,
+        timestamp=datetime(2026, 1, 5, tzinfo=UTC),
+        zone_low=99.0, zone_high=101.0, strength=0.02,
+    )
+    with patch("collectors.market_data._fetch_ohlcv", return_value=candles), \
+         patch("agents.smc.detect_all", return_value=[detection]):
+        result = await get_smc_context("AAPL")
+    assert "n=142" in result
+    assert "57%" in result
+    assert "+0.6%" in result
+
+
+# ── Task 2: MarketWatch smc_detected ─────────────────────────────────────────
+
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_market_watch_logs_smc_detected(db_session, db_engine):
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock, patch
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from agents.market_watch import MarketWatchAgent
+    from agents.smc import SMCDetection
+    from memory.database import AgentLog
+
+    ts = datetime(2026, 1, 5, tzinfo=UTC)
+    detection = SMCDetection("fvg", "bullish", 4, ts, 99.0, 101.0, 0.02)
+    candles = [
+        {"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0,
+         "volume": 1000.0, "timestamp": datetime(2026, 1, i + 1, tzinfo=UTC)}
+        for i in range(5)
+    ]
+
+    with (
+        patch("agents.market_watch.fetch_watchlist_snapshots", new=AsyncMock(return_value=[])),
+        patch("agents.market_watch.fetch_ohlcv", new=AsyncMock(return_value=candles)),
+        patch("agents.market_watch.detect_all", return_value=[detection]),
+    ):
+        await MarketWatchAgent().run()
+
+    async with async_sessionmaker(db_engine, expire_on_commit=False)() as s:
+        logs = (await s.execute(
+            select(AgentLog).where(AgentLog.action == "smc_detected")
+        )).scalars().all()
+
+    assert len(logs) >= 1
+    assert logs[0].meta["pattern"] == "fvg"
+    assert logs[0].meta["bias"] == "bullish"
