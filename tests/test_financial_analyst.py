@@ -258,3 +258,22 @@ async def test_run_writes_agent_log(db_session, db_engine):
 
     assert any(log.action == "analyze" for log in logs)
     assert any(log.action == "run" for log in logs)
+
+
+async def test_financial_analyst_calls_get_smc_context(db_session, db_engine):
+    """get_smc_context is awaited per ticker and injected into the analyze prompt."""
+    from agents.financial_analyst import FinancialAnalystAgent
+
+    smc_mock = AsyncMock(return_value="SMC block sentinel")
+    analyze_mock = AsyncMock(return_value=_BULLISH_RESPONSE)
+    with patch("agents.financial_analyst._fetch_metrics", return_value=_STRONG_METRICS), \
+         patch("agents.financial_analyst._settings") as s, \
+         patch("agents.financial_analyst.get_factor_context", new=AsyncMock(return_value="")), \
+         patch("agents.financial_analyst.get_smc_context", new=smc_mock), \
+         patch("intelligence.llm.analyze", new=analyze_mock):
+        s.watchlist = ["AAPL"]
+        await FinancialAnalystAgent().run()
+
+    smc_mock.assert_awaited_with("AAPL")
+    prompt = analyze_mock.call_args.args[0]
+    assert "SMC block sentinel" in prompt

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 
 from agents.base import BaseAgent
+from agents.smc import get_smc_context
 from config.settings import get_settings
 from memory.database import AsyncSessionLocal, Signal
 from memory.vector_store import search
@@ -51,9 +52,12 @@ class ResearchAnalystAgent(BaseAgent):
             if memory_lines else ""
         )
 
+        smc_context = await get_smc_context(target)
+
         prompt = (
             f"Ticker: {target}\n\nRecent news:\n{news_context}{memory_section}\n\n"
-            "Write a 3-sentence investment thesis: directional bias, "
+            + (smc_context + "\n\n" if smc_context else "")
+            + "Write a 3-sentence investment thesis: directional bias, "
             "key risk, near-term catalyst.\n\n"
             "Then grade the outlook for each time horizon (S=Strong Buy, A=Buy, B=Hold, C=Sell):\n"
             "SHORT: <grade>\n"
