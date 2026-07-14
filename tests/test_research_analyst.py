@@ -123,3 +123,20 @@ async def test_run_writes_agent_log(db_session, db_engine):
         )).scalars().all()
 
     assert any(log.action == "research" for log in logs)
+
+
+async def test_research_analyst_calls_get_smc_context(db_session, db_engine):
+    """get_smc_context is awaited for the ticker and injected into the analyze prompt."""
+    from agents.research_analyst import ResearchAnalystAgent
+
+    docs = [{"title": "AAPL strong iPhone sales"}]
+    smc_mock = AsyncMock(return_value="SMC block sentinel")
+    analyze_mock = AsyncMock(return_value="Thesis.")
+    with patch("agents.research_analyst.search", new=AsyncMock(return_value=docs)), \
+         patch("agents.research_analyst.get_smc_context", new=smc_mock), \
+         patch("intelligence.llm.analyze", new=analyze_mock):
+        await ResearchAnalystAgent().run(ticker="AAPL")
+
+    smc_mock.assert_awaited_with("AAPL")
+    prompt = analyze_mock.call_args.args[0]
+    assert "SMC block sentinel" in prompt

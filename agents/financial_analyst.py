@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from agents.base import BaseAgent
 from agents.factor_library import get_factor_context
+from agents.smc import get_smc_context
 from config.settings import get_settings
 from intelligence.composite_scorer import compute_composite
 from memory.database import AsyncSessionLocal, Signal
@@ -112,9 +113,11 @@ class FinancialAnalystAgent(BaseAgent):
 
             formatted = _fmt_metrics(metrics)
             factor_context = await get_factor_context(symbol)
+            smc_context = await get_smc_context(symbol)
             prompt = (
                 f"Ticker: {symbol}\n\nFinancial Metrics:\n{formatted}\n\n"
                 + (factor_context + "\n\n" if factor_context else "")
+                + (smc_context + "\n\n" if smc_context else "")
                 + "Assess this company's financial health and investment outlook.\n\n"
                 "Respond EXACTLY in this format:\n"
                 "SIGNAL: <bullish|bearish|watchlist>\n"
