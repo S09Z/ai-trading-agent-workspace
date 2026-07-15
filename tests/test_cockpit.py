@@ -175,3 +175,28 @@ async def test_logs_returns_all_agents(client, db_engine):
     names = {row["agent_name"] for row in r.json()}
     assert "news_hunter" in names
     assert "risk_monitor" in names
+
+
+# ── Swarm (PR #9) ────────────────────────────────────────────────────────────────
+
+async def test_swarm_presets_lists_examples(client):
+    r = await client.get("/swarm/presets")
+    assert r.status_code == 200
+    names = {p["name"] for p in r.json()}
+    assert "Earnings Research Desk" in names
+
+
+async def test_swarm_run_enqueues_task(client):
+    from unittest.mock import MagicMock, patch
+
+    with patch("scheduler.tasks.celery_app.send_task", new=MagicMock()) as send:
+        r = await client.post("/swarm/run/earnings_desk")
+
+    assert r.status_code == 200
+    assert r.json() == {"status": "queued", "preset": "earnings_desk"}
+    send.assert_called_once()
+
+
+async def test_swarm_run_unknown_preset_404(client):
+    r = await client.post("/swarm/run/nope")
+    assert r.status_code == 404

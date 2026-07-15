@@ -75,6 +75,14 @@ def run_discovery_agent() -> None:
     asyncio.run(DiscoveryAgent().run())
 
 
+# ── Swarm tasks (PR #9) ─────────────────────────────────────────────────────────
+
+@celery_app.task(name="scheduler.tasks.run_swarm")
+def run_swarm(preset: str) -> None:
+    from agents.swarm_loader import run_swarm as _run_swarm
+    asyncio.run(_run_swarm(preset))
+
+
 # ── Phase 8 tasks ──────────────────────────────────────────────────────────────
 
 @celery_app.task(name="scheduler.tasks.run_factor_scoring")

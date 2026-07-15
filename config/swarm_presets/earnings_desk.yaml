@@ -1,0 +1,19 @@
+name: Earnings Research Desk
+description: "Deep dive before an earnings announcement — fundamentals + sentiment, gated by risk, synthesised into a research thesis."
+agents:
+  - id: fundamental
+    type: FinancialAnalyst
+    depends_on: []
+
+  - id: sentiment
+    type: SentimentAnalyst
+    depends_on: []
+
+  - id: risk
+    type: RiskMonitor
+    depends_on: [fundamental, sentiment]
+
+  - id: research
+    type: ResearchAnalyst
+    depends_on: [risk]
+    output: final_signal

@@ -1,0 +1,15 @@
+name: Quant Strategy Desk
+description: "Factor screening then research synthesis, audited by risk before producing an approved strategy view."
+agents:
+  - id: factor_screener
+    type: FinancialAnalyst
+    depends_on: []
+
+  - id: research
+    type: ResearchAnalyst
+    depends_on: [factor_screener]
+
+  - id: risk_auditor
+    type: RiskMonitor
+    depends_on: [research]
+    output: approved_strategy

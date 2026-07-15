@@ -96,6 +96,9 @@ financial: ## Run FinancialAnalystAgent — analyze financials for all watchlist
 discover: ## Run DiscoveryAgent — find universe tickers with strong news mentions outside watchlist
 	$(UV) python -c "import asyncio; from agents.discovery_agent import DiscoveryAgent; asyncio.run(DiscoveryAgent().run())"
 
+swarm: ## Run a YAML swarm preset — e.g. make swarm PRESET=earnings_desk
+	$(UV) python -c "import asyncio; from agents.swarm_loader import run_swarm; asyncio.run(run_swarm('$(PRESET)'))"
+
 backtest: ## Run walk-forward backtest on watchlist tickers
 	$(UV) python -m backtesting.engine
 
