@@ -1,16 +1,18 @@
 import Link from "next/link";
-import { getAgents, getLogs, getSignals } from "@/lib/api";
+import { getAgents, getLogs, getSignals, getSwarmPresets } from "@/lib/api";
 import AgentStatusBadge from "@/components/AgentStatusBadge";
 import SignalCard from "@/components/SignalCard";
 import ActivityLog from "@/components/ActivityLog";
+import SwarmLauncher from "@/components/SwarmLauncher";
 
 export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
-  const [agents, signals, logs] = await Promise.all([
+  const [agents, signals, logs, presets] = await Promise.all([
     getAgents(),
     getSignals(),
     getLogs(),
+    getSwarmPresets(),
   ]);
 
   return (
@@ -41,6 +43,14 @@ export default async function Dashboard() {
               <AgentStatusBadge key={agent.name} agent={agent} />
             ))}
           </div>
+        </section>
+
+        {/* Swarm launcher */}
+        <section>
+          <h2 className="text-xs font-mono text-slate-500 uppercase tracking-wider mb-3">
+            Swarms
+          </h2>
+          <SwarmLauncher presets={presets} />
         </section>
 
         {/* Signals + log */}
