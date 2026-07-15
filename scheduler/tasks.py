@@ -94,6 +94,15 @@ def run_factor_scoring() -> None:
     asyncio.run(_run())
 
 
+# ── Phase 10+ tasks — SMC ────────────────────────────────────────────────────────
+
+@celery_app.task(name="scheduler.tasks.run_smc_validation")
+def run_smc_validation() -> None:
+    from backtesting.smc_validation import run_smc_validation as _validate
+
+    asyncio.run(_validate())
+
+
 # ── Phase 7 tasks ──────────────────────────────────────────────────────────────
 
 @celery_app.task(name="scheduler.tasks.run_memory_agent")
@@ -170,5 +179,10 @@ celery_app.conf.beat_schedule = {
     "factor-scoring": {
         "task": "scheduler.tasks.run_factor_scoring",
         "schedule": crontab(hour=6, minute=0, day_of_week=1),  # Monday 06:00 UTC
+    },
+    # Phase 10+ — SMC event-study validation
+    "smc-validation": {
+        "task": "scheduler.tasks.run_smc_validation",
+        "schedule": crontab(hour=6, minute=30, day_of_week=1),  # Monday 06:30 UTC
     },
 }
