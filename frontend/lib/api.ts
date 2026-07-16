@@ -1,5 +1,5 @@
-import type { AgentStatus, LogEntry, SignalOut } from "./types";
-import { MOCK_AGENTS, MOCK_SIGNALS, MOCK_LOGS } from "@/mocks";
+import type { AgentStatus, LogEntry, SignalOut, StockHistory, StockAnalysis } from "./types";
+import { MOCK_AGENTS, MOCK_SIGNALS, MOCK_LOGS, MOCK_STOCK_HISTORY, MOCK_STOCK_ANALYSIS } from "@/mocks";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
@@ -32,4 +32,24 @@ export async function getLogs(hours = 1, limit = 100): Promise<LogEntry[]> {
     if (!res.ok) return [];
     return res.json();
   } catch { return []; }
+}
+
+export async function getStockHistory(ticker: string): Promise<StockHistory | null> {
+  const key = ticker.toUpperCase();
+  if (IS_MOCK) return MOCK_STOCK_HISTORY[key] ?? MOCK_STOCK_HISTORY["NVDA"] ?? null;
+  try {
+    const res = await fetch(`${API}/stocks/${key}/history`, NO_CACHE);
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
+}
+
+export async function getStockAnalysis(ticker: string): Promise<StockAnalysis | null> {
+  const key = ticker.toUpperCase();
+  if (IS_MOCK) return MOCK_STOCK_ANALYSIS[key] ?? null;
+  try {
+    const res = await fetch(`${API}/stocks/${key}/analysis`, NO_CACHE);
+    if (!res.ok) return null;
+    return res.json();
+  } catch { return null; }
 }
