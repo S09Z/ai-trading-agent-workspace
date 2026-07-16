@@ -208,6 +208,54 @@ function OverviewPanel({
   );
 }
 
+// ── SVG arc gauge ────────────────────────────────────────────────────────────
+function CompositeGauge({ score, grade }: { score: number; grade: string }) {
+  const cx = 100, cy = 105, r = 75, sw = 14;
+  const sx = cx - r, sy = cy; // start (left)
+  const ex = cx + r, ey = cy; // end (right)
+  const trackD = `M ${sx} ${sy} A ${r} ${r} 0 0 0 ${ex} ${ey}`;
+
+  // Fill arc: counterclockwise from left to the score's position
+  let fillD = "";
+  if (score > 0) {
+    if (score >= 100) {
+      fillD = trackD;
+    } else {
+      const θ = Math.PI - (score / 100) * Math.PI;
+      const fx = +(cx + r * Math.cos(θ)).toFixed(2);
+      const fy = +(cy - r * Math.sin(θ)).toFixed(2);
+      fillD = `M ${sx} ${sy} A ${r} ${r} 0 0 0 ${fx} ${fy}`;
+    }
+  }
+
+  const gaugeColor = score >= 70 ? "#35ed7e" : score >= 40 ? "#fde047" : "#f87171";
+  const gradeColor = GRADE_COLOR[grade] ?? C.dim;
+
+  return (
+    <svg viewBox="0 0 200 130" style={{ width: "100%", maxWidth: 220, height: "auto" }}>
+      <path d={trackD} fill="none" stroke={C.border} strokeWidth={sw} strokeLinecap="round" />
+      {fillD && (
+        <path d={fillD} fill="none" stroke={gaugeColor} strokeWidth={sw} strokeLinecap="round" />
+      )}
+      <text
+        x={cx} y={cy - 10}
+        textAnchor="middle" dominantBaseline="middle"
+        fontSize="36" fontWeight="bold" fill={gradeColor}
+        style={{ fontFamily: "var(--font-space-grotesk, sans-serif)" }}
+      >
+        {grade}
+      </text>
+      <text
+        x={cx} y={cy + 16}
+        textAnchor="middle" dominantBaseline="middle"
+        fontSize="13" fill={C.dim}
+      >
+        {score.toFixed(1)} / 100
+      </text>
+    </svg>
+  );
+}
+
 function AIPanel({ analysis }: { analysis: StockAnalysis | null }) {
   if (!analysis?.has_analysis) {
     return (
@@ -234,7 +282,6 @@ function AIPanel({ analysis }: { analysis: StockAnalysis | null }) {
 
   const score = analysis.composite_score ?? 0;
   const grade = analysis.grade_short ?? "—";
-  const gradeColor = GRADE_COLOR[grade] ?? C.dim;
   const breakdown = Object.entries(analysis.composite_breakdown ?? {}).sort(
     ([, a], [, b]) => b - a
   );
@@ -247,29 +294,9 @@ function AIPanel({ analysis }: { analysis: StockAnalysis | null }) {
         className="rounded-xl p-5 flex items-center justify-between"
         style={{ background: C.panel, border: `1px solid ${C.border}` }}
       >
-        <div>
-          <p className="text-sm uppercase tracking-wider mb-1" style={{ color: C.dim }}>
-            Composite Score
-          </p>
-          <div className="flex items-baseline gap-3">
-            <span
-              className="text-5xl font-bold"
-              style={{
-                color: gradeColor,
-                fontFamily: "var(--font-space-grotesk, sans-serif)",
-              }}
-            >
-              {grade}
-            </span>
-            <span className="text-3xl font-semibold" style={{ color: C.text }}>
-              {score.toFixed(1)}
-              <span className="text-base" style={{ color: C.dim }}>
-                {" "}
-                / 100
-              </span>
-            </span>
-          </div>
-          <p className="text-sm mt-1 capitalize" style={{ color: C.dim }}>
+        <div className="flex flex-col items-center" style={{ minWidth: 160 }}>
+          <CompositeGauge score={score} grade={grade} />
+          <p className="text-sm capitalize -mt-1" style={{ color: C.dim }}>
             {analysis.signal_type} · {((analysis.confidence ?? 0) * 100).toFixed(0)}% confidence
           </p>
         </div>
