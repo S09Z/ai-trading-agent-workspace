@@ -27,3 +27,16 @@ export interface SignalOut {
   grade_long: string | null;
   created_at: string;
 }
+
+export interface SwarmPresetAgent {
+  id: string;
+  type: string;
+  depends_on: string[];
+}
+
+export interface SwarmPreset {
+  name: string;
+  description?: string;
+  filename: string;
+  agents: SwarmPresetAgent[];
+}

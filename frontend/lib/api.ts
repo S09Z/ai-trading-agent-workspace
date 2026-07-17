@@ -1,5 +1,5 @@
-import type { AgentStatus, LogEntry, SignalOut } from "./types";
-import { MOCK_AGENTS, MOCK_SIGNALS, MOCK_LOGS } from "@/mocks";
+import type { AgentStatus, LogEntry, SignalOut, SwarmPreset } from "./types";
+import { MOCK_AGENTS, MOCK_SIGNALS, MOCK_LOGS, MOCK_PRESETS } from "@/mocks";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
@@ -32,4 +32,24 @@ export async function getLogs(hours = 1, limit = 100): Promise<LogEntry[]> {
     if (!res.ok) return [];
     return res.json();
   } catch { return []; }
+}
+
+export async function getSwarmPresets(): Promise<SwarmPreset[]> {
+  if (IS_MOCK) return MOCK_PRESETS;
+  try {
+    const res = await fetch(`${API}/swarm/presets`, NO_CACHE);
+    if (!res.ok) return [];
+    return res.json();
+  } catch { return []; }
+}
+
+export async function runSwarm(preset: string): Promise<{ ok: boolean; detail?: string }> {
+  try {
+    const res = await fetch(`${API}/swarm/run/${preset}`, { method: "POST" });
+    if (res.ok) return { ok: true };
+    const body = await res.json().catch(() => null);
+    return { ok: false, detail: body?.detail ?? `HTTP ${res.status}` };
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? e.message : "network error" };
+  }
 }
