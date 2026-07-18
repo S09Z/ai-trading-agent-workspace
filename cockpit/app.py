@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 
-from cockpit.routers import agents, logs, outcomes, signals, swarm
+from cockpit.routers import agents, logs, outcomes, signals, stocks, swarm
 from config.settings import get_settings
 from memory.database import AsyncSessionLocal
 
@@ -24,6 +24,7 @@ app.include_router(signals.router, prefix="/signals", tags=["signals"])
 app.include_router(logs.router, prefix="/logs", tags=["logs"])
 app.include_router(outcomes.router, prefix="/outcomes", tags=["outcomes"])
 app.include_router(swarm.router, prefix="/swarm", tags=["swarm"])
+app.include_router(stocks.router, prefix="/stocks", tags=["stocks"])
 
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
