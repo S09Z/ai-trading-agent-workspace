@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { SignalOut } from "@/lib/types";
 
 const TYPE_STYLE: Record<string, string> = {
@@ -51,7 +52,12 @@ export default function SignalCard({ signal }: { signal: SignalOut }) {
     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-xl font-bold text-white font-mono">{signal.ticker}</span>
+        <Link
+          href={`/stock/${signal.ticker}`}
+          className="text-xl font-bold text-white font-mono hover:text-blue-400 transition-colors"
+        >
+          {signal.ticker}
+        </Link>
         <span className={`text-xs font-semibold px-2 py-1 rounded border ${typeStyle}`}>
           {signal.signal_type.toUpperCase()}
         </span>
