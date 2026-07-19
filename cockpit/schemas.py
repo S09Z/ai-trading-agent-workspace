@@ -56,3 +56,45 @@ class AgentAccuracy(BaseModel):
     incorrect: int
     neutral: int
     accuracy_pct: float | None
+
+
+class StockBar(BaseModel):
+    t: str  # ISO date (YYYY-MM-DD)
+    o: float
+    h: float
+    l: float  # noqa: E741 — OHLCV wire key expected by lightweight-charts
+    c: float
+    v: float
+
+
+class StockMeta(BaseModel):
+    ticker: str
+    name: str | None = None
+    market_cap: float | None = None
+    pe: float | None = None
+    price: float | None = None
+    change: float | None = None
+    change_pct: float | None = None
+    volume: float | None = None
+
+
+class StockHistoryOut(BaseModel):
+    meta: StockMeta
+    bars: list[StockBar]
+
+
+class StockAnalysisOut(BaseModel):
+    ticker: str
+    has_analysis: bool
+    composite_score: float | None = None
+    composite_breakdown: dict = {}
+    signal_type: str | None = None
+    confidence: float | None = None
+    grade_short: str | None = None
+    grade_mid: str | None = None
+    grade_long: str | None = None
+    rationale: str | None = None
+    source_agent: str | None = None
+    created_at: datetime | None = None
+    outcomes: list[SignalOutcomeOut] = []
+    accuracy_pct: float | None = None
