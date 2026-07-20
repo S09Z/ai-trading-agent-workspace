@@ -6,6 +6,19 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getStockAnalysis, getStockHistory } from "@/lib/api";
 import type { StockAnalysis, StockBar, StockHistory } from "@/lib/types";
+import {
+  bollinger,
+  cumulativeReturnPct,
+  drawdownPct,
+  ema,
+  macd,
+  rsi,
+  sma,
+  stochastic,
+  toBars,
+} from "@/lib/indicators";
+import CandleVolumeChart from "./CandleVolumeChart";
+import SeriesChart from "./SeriesChart";
 
 // ── palette (inline style values) ────────────────────────────────────────────
 const C = {
@@ -156,19 +169,6 @@ function StatCard({
   );
 }
 
-function ChartPlaceholder({ label }: { label: string }) {
-  return (
-    <div
-      className="rounded-xl flex items-center justify-center h-64"
-      style={{ background: C.panel, border: `1px dashed ${C.border}` }}
-    >
-      <span className="text-sm" style={{ color: C.dim }}>
-        {label} — charts in sub-task C
-      </span>
-    </div>
-  );
-}
-
 // ── tab panels ────────────────────────────────────────────────────────────────
 
 function OverviewPanel({
@@ -203,7 +203,7 @@ function OverviewPanel({
           value={fmtVol(s.avgVol20)}
         />
       </div>
-      <ChartPlaceholder label="Candlestick + Volume" />
+      {slice.length > 0 && <CandleVolumeChart bars={slice} height={340} />}
     </div>
   );
 }
@@ -423,15 +423,56 @@ function AIPanel({ analysis }: { analysis: StockAnalysis | null }) {
 
 function TechnicalPanel({ bars, tf }: { bars: StockBar[]; tf: Timeframe }) {
   const slice = sliceBars(bars, tf);
+  const closes = slice.map((b) => b.c);
   const last = slice[slice.length - 1];
-  const prev20 = slice.slice(-20);
-  const sma20 =
-    prev20.length > 0
-      ? prev20.reduce((s, b) => s + b.c, 0) / prev20.length
-      : null;
-  const vsma = sma20 != null && last ? ((last.c - sma20) / sma20) * 100 : null;
+
+  // stat tiles
+  const sma20Vals = sma(closes, 20);
+  const lastSma20 = sma20Vals[sma20Vals.length - 1];
+  const vsma = last && lastSma20 != null ? ((last.c - lastSma20) / lastSma20) * 100 : null;
+
+  // indicator series
+  const bbVals = bollinger(closes);
+  const ema20Vals = ema(closes, 20);
+  const ema50Vals = ema(closes, 50);
+  const rsiVals = rsi(closes);
+  const macdVals = macd(closes);
+  const stochVals = stochastic(slice);
+
+  const candleData = slice.map((b) => ({
+    time: b.t,
+    open: b.o,
+    high: b.h,
+    low: b.l,
+    close: b.c,
+  }));
+  const bbUpperData = toBars(slice, bbVals.upper);
+  const bbMiddleData = toBars(slice, bbVals.middle);
+  const bbLowerData = toBars(slice, bbVals.lower);
+  const ema20Data = toBars(slice, ema20Vals);
+  const ema50Data = toBars(slice, ema50Vals);
+
+  const rsiData = toBars(slice, rsiVals);
+
+  const macdLineData = toBars(slice, macdVals.macd);
+  const signalData = toBars(slice, macdVals.signal);
+  const macdHistData = slice
+    .map((b, i) => ({
+      time: b.t,
+      value: macdVals.histogram[i] ?? 0,
+      color:
+        (macdVals.histogram[i] ?? 0) >= 0
+          ? "rgba(53,237,126,0.65)"
+          : "rgba(248,113,113,0.65)",
+    }))
+    .filter((_, i) => macdVals.histogram[i] != null);
+
+  const stochKData = toBars(slice, stochVals.k);
+  const stochDData = toBars(slice, stochVals.d);
+
   return (
     <div className="space-y-4">
+      {/* stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Last Close"
@@ -439,23 +480,97 @@ function TechnicalPanel({ bars, tf }: { bars: StockBar[]; tf: Timeframe }) {
         />
         <StatCard
           label="SMA 20"
-          value={sma20 != null ? `$${sma20.toFixed(2)}` : "—"}
+          value={lastSma20 != null ? `$${lastSma20.toFixed(2)}` : "—"}
         />
         <StatCard
           label="vs SMA 20"
           value={vsma != null ? `${vsma.toFixed(2)}%` : "—"}
           accent={vsma == null ? undefined : vsma >= 0 ? C.green : "#f87171"}
         />
-        <StatCard
-          label="Volume (last)"
-          value={last ? fmtVol(last.v) : "—"}
-        />
+        <StatCard label="Volume (last)" value={last ? fmtVol(last.v) : "—"} />
       </div>
-      <ChartPlaceholder label="Price + Bollinger + SMA overlay" />
+
+      {/* Price + BB + EMA */}
+      {candleData.length > 0 && (
+        <SeriesChart
+          label="Price · BB (20,2) · EMA 20/50"
+          height={300}
+          series={[
+            { kind: "candle", data: candleData },
+            {
+              kind: "line",
+              data: bbUpperData,
+              color: "rgba(88,101,242,0.55)",
+              lineWidth: 1,
+            },
+            {
+              kind: "line",
+              data: bbMiddleData,
+              color: "rgba(88,101,242,0.35)",
+              lineWidth: 1,
+            },
+            {
+              kind: "line",
+              data: bbLowerData,
+              color: "rgba(88,101,242,0.55)",
+              lineWidth: 1,
+            },
+            {
+              kind: "line",
+              data: ema20Data,
+              color: C.cyan,
+              lineWidth: 2,
+              title: "EMA20",
+            },
+            {
+              kind: "line",
+              data: ema50Data,
+              color: C.magenta,
+              lineWidth: 2,
+              title: "EMA50",
+            },
+          ]}
+        />
+      )}
+
+      {/* RSI · MACD · Stochastic */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <ChartPlaceholder label="RSI (14)" />
-        <ChartPlaceholder label="MACD" />
-        <ChartPlaceholder label="Stochastic" />
+        {rsiData.length > 0 && (
+          <SeriesChart
+            label="RSI (14)"
+            height={160}
+            series={[{ kind: "line", data: rsiData, color: C.magenta, lineWidth: 2 }]}
+            thresholds={[
+              { value: 70, color: "rgba(248,113,113,0.45)" },
+              { value: 30, color: "rgba(53,237,126,0.45)" },
+            ]}
+          />
+        )}
+        {macdLineData.length > 0 && (
+          <SeriesChart
+            label="MACD (12, 26, 9)"
+            height={160}
+            series={[
+              { kind: "histogram", data: macdHistData, color: C.blurple },
+              { kind: "line", data: macdLineData, color: C.cyan, lineWidth: 2 },
+              { kind: "line", data: signalData, color: C.magenta, lineWidth: 1 },
+            ]}
+          />
+        )}
+        {stochKData.length > 0 && (
+          <SeriesChart
+            label="Stochastic (14, 3)"
+            height={160}
+            series={[
+              { kind: "line", data: stochKData, color: C.green, lineWidth: 2 },
+              { kind: "line", data: stochDData, color: C.magenta, lineWidth: 1 },
+            ]}
+            thresholds={[
+              { value: 80, color: "rgba(248,113,113,0.45)" },
+              { value: 20, color: "rgba(53,237,126,0.45)" },
+            ]}
+          />
+        )}
       </div>
     </div>
   );
@@ -493,8 +608,39 @@ function PerformancePanel({ bars, tf }: { bars: StockBar[]; tf: Timeframe }) {
           }
         />
       </div>
-      <ChartPlaceholder label="Drawdown curve" />
-      <ChartPlaceholder label="Cumulative return" />
+      {slice.length > 0 && (
+        <SeriesChart
+          label="Drawdown %"
+          height={200}
+          series={[
+            {
+              kind: "area",
+              data: drawdownPct(slice).map((v, i) => ({ time: slice[i].t, value: v })),
+              lineColor: "#f87171",
+              topColor: "rgba(248,113,113,0.1)",
+              bottomColor: "rgba(248,113,113,0.3)",
+            },
+          ]}
+        />
+      )}
+      {slice.length > 0 && (
+        <SeriesChart
+          label="Cumulative Return %"
+          height={200}
+          series={[
+            {
+              kind: "area",
+              data: cumulativeReturnPct(slice).map((v, i) => ({
+                time: slice[i].t,
+                value: v,
+              })),
+              lineColor: C.green,
+              topColor: "rgba(53,237,126,0.3)",
+              bottomColor: "rgba(53,237,126,0.05)",
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }
